@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="theme-color" content="#2563eb">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Entrar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root {
+  --azul: #2563eb;
+  --azul-escuro: #1d4ed8;
+  --ciano: #06b6d4;
+  --gradiente: linear-gradient(135deg, var(--azul), var(--ciano));
+  --escuro: #0f172a;
+  --cinza-texto: #64748b;
+  --cinza-linha: #e2e8f0;
+  --cinza-claro: #f8fafc;
+  --erro: #ef4444;
+  --sucesso: #16a34a;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--gradiente);
+  color: var(--escuro);
+}
+.container { max-width: 420px; margin: 0 auto; padding: 64px 20px 40px; min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; }
+.logo-wrap { text-align: center; margin-bottom: 28px; }
+.logo-badge {
+  width: 56px; height: 56px; margin: 0 auto 14px; border-radius: 16px; background: rgba(255,255,255,.16);
+  display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px);
+}
+.logo-badge svg { width: 30px; height: 30px; color: #fff; }
+.logo-wrap .marca { color: #fff; font-family: "Manrope", sans-serif; font-weight: 800; font-size: 20px; }
+.logo-wrap .sub { color: rgba(255,255,255,.85); font-size: 13px; margin-top: 2px; }
+.card { background: #fff; border-radius: 20px; padding: 26px 22px; box-shadow: 0 24px 60px rgba(15,23,42,.28); }
+h1 { margin: 0 0 4px; font-family: "Manrope", sans-serif; font-weight: 800; font-size: 22px; }
+label { display: block; font-size: 12.5px; font-weight: 600; margin: 14px 0 5px; color: var(--cinza-texto); }
+input {
+  width: 100%; padding: 12px 13px; border: 1.5px solid var(--cinza-linha);
+  border-radius: 10px; font-size: 16px; color: var(--escuro); background: #fff; font-family: inherit;
+}
+input:focus { outline: none; border-color: var(--azul); box-shadow: 0 0 0 3px #eff6ff; }
+.btn {
+  display: block; width: 100%; padding: 13px 16px; border-radius: 12px; border: none;
+  background: var(--gradiente); color: #fff; font-size: 15px; font-weight: 700;
+  cursor: pointer; margin-top: 18px; text-align: center;
+  box-shadow: 0 6px 18px rgba(37,99,235,.3); transition: transform .1s;
+}
+.btn:active { transform: scale(.98); }
+.btn-secundario { background: #fff; color: var(--azul); border: 1.5px solid var(--cinza-linha); box-shadow: none; margin-top: 10px; }
+.btn-secundario:hover { background: #f8fafc; }
+.msg { font-size: 13.5px; margin-top: 10px; min-height: 18px; font-weight: 500; }
+.msg.erro { color: var(--erro); }
+.msg.ok { color: var(--sucesso); }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="logo-wrap">
+    <div class="logo-badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></svg>
+    </div>
+    <div class="marca">Estelar Orçamentos</div>
+    <div class="sub">Ferramentas para o seu dia a dia</div>
+  </div>
+  <div class="card">
+    <h1 id="titulo">Entrar</h1>
+    <p style="color: var(--cinza-texto); font-size: 14px; margin-top: -8px;">
+      Acesse sua conta para gerenciar orçamentos e contratos.
+    </p>
+
+    <label for="email">E-mail</label>
+    <input type="email" id="email" placeholder="voce@empresa.com">
+
+    <label for="senha">Senha</label>
+    <input type="password" id="senha" placeholder="Mínimo 6 caracteres">
+
+    <div class="msg" id="msgStatus"></div>
+
+    <button class="btn" id="btnPrincipal">Entrar</button>
+    <button class="btn btn-secundario" id="btnAlternar">Ainda não tenho conta</button>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = "https://lkankciqsldutuncuvyl.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_QAzF6HlUkYoAumTQCzKuVg_FEmhtwQ8";
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let modoCadastro = false;
+const msg = document.getElementById("msgStatus");
+const btnPrincipal = document.getElementById("btnPrincipal");
+const btnAlternar = document.getElementById("btnAlternar");
+
+function mostrarMsg(texto, tipo) {
+  msg.textContent = texto;
+  msg.className = "msg " + (tipo || "");
+}
+
+btnAlternar.addEventListener("click", () => {
+  modoCadastro = !modoCadastro;
+  document.getElementById("titulo").textContent = modoCadastro ? "Criar conta" : "Entrar";
+  btnPrincipal.textContent = modoCadastro ? "Criar conta" : "Entrar";
+  btnAlternar.textContent = modoCadastro ? "Já tenho conta" : "Ainda não tenho conta";
+  mostrarMsg("", "");
+});
+
+btnPrincipal.addEventListener("click", async () => {
+  const email = document.getElementById("email").value.trim();
+  const senha = document.getElementById("senha").value;
+
+  if (!email || !senha) {
+    mostrarMsg("Preencha e-mail e senha.", "erro");
+    return;
+  }
+
+  btnPrincipal.disabled = true;
+  mostrarMsg("Aguarde...", "");
+
+  try {
+    if (modoCadastro) {
+      if (senha.length < 6) {
+        mostrarMsg("A senha precisa ter pelo menos 6 caracteres.", "erro");
+        btnPrincipal.disabled = false;
+        return;
+      }
+      const { data, error } = await supabaseClient.auth.signUp({ email, password: senha });
+      if (error) {
+        mostrarMsg("Erro ao criar conta: " + error.message, "erro");
+        btnPrincipal.disabled = false;
+        return;
+      }
+      if (!data.session) {
+        mostrarMsg("Conta criada! Verifique seu e-mail para confirmar antes de entrar.", "ok");
+        btnPrincipal.disabled = false;
+        return;
+      }
+      window.location.href = "painel.html";
+    } else {
+      const { error } = await supabaseClient.auth.signInWithPassword({ email, password: senha });
+      if (error) {
+        mostrarMsg("E-mail ou senha incorretos.", "erro");
+        btnPrincipal.disabled = false;
+        return;
+      }
+      window.location.href = "painel.html";
+    }
+  } catch (e) {
+    mostrarMsg("Erro de conexão: " + e.message, "erro");
+    btnPrincipal.disabled = false;
+  }
+});
+
+(async () => {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (session) window.location.href = "painel.html";
+})();
+</script>
+</body>
+</html>

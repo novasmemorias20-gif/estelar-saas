@@ -1,0 +1,1470 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="theme-color" content="#2563eb">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Painel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root {
+  --azul: #2563eb;
+  --azul-escuro: #1d4ed8;
+  --azul-tinta: #eff6ff;
+  --ciano: #06b6d4;
+  --gradiente: linear-gradient(135deg, var(--azul), var(--ciano));
+  --ambar: #f59e0b;
+  --ambar-escuro: #b45309;
+  --escuro: #0f172a;
+  --cinza-texto: #64748b;
+  --cinza-linha: #e2e8f0;
+  --cinza-claro: #f8fafc;
+  --erro: #ef4444;
+  --erro-bg: #fee2e2;
+  --sucesso: #16a34a;
+  --sucesso-bg: #dcfce7;
+  --sombra: 0 1px 2px rgba(15,23,42,.05), 0 6px 16px rgba(15,23,42,.06);
+  --sombra-flutuante: 0 8px 28px rgba(15,23,42,.14);
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--cinza-claro);
+  color: var(--escuro);
+  font-variant-numeric: tabular-nums;
+}
+h1, h2, h3 { font-family: "Manrope", "Inter", sans-serif; letter-spacing: -0.01em; }
+.container { max-width: 480px; margin: 0 auto; padding: 20px 16px calc(96px + env(safe-area-inset-bottom)); }
+@media (min-width: 700px) { .container { max-width: 620px; } }
+.card { background: #fff; border: 1px solid var(--cinza-linha); border-radius: 16px; padding: 20px; margin-bottom: 14px; box-shadow: var(--sombra); }
+h2, h3 { color: var(--escuro); margin-top: 0; }
+h2 { font-weight: 800; }
+h3 { font-weight: 800; font-size: 16px; }
+label { display: block; font-size: 12.5px; font-weight: 600; margin: 12px 0 5px; color: var(--cinza-texto); }
+label:first-child { margin-top: 0; }
+input, select {
+  width: 100%; padding: 11px 13px; border: 1.5px solid var(--cinza-linha);
+  border-radius: 10px; font-size: 15px; color: var(--escuro); background: #fff;
+  font-family: inherit; transition: border-color .15s, box-shadow .15s;
+}
+input:focus, select:focus { outline: none; border-color: var(--azul); box-shadow: 0 0 0 3px var(--azul-tinta); }
+.btn {
+  display: inline-block; width: 100%; padding: 13px 16px; border-radius: 12px; border: none;
+  background: var(--gradiente); color: #fff; font-size: 15px; font-weight: 700;
+  cursor: pointer; margin-top: 16px; text-align: center; text-decoration: none;
+  box-shadow: 0 4px 14px rgba(37,99,235,.28); transition: transform .1s, box-shadow .15s;
+}
+.btn:hover { box-shadow: 0 6px 18px rgba(37,99,235,.36); }
+.btn:active { transform: scale(.98); }
+.btn-secundario { background: #fff; color: var(--azul); border: 1.5px solid var(--cinza-linha); box-shadow: none; }
+.btn-secundario:hover { background: var(--azul-tinta); border-color: var(--azul); box-shadow: none; }
+.btn-ambar { background: var(--ambar); color: #1a1200; box-shadow: 0 4px 14px rgba(245,158,11,.3); }
+.btn-ambar:hover { filter: brightness(1.03); box-shadow: 0 6px 18px rgba(245,158,11,.38); }
+.msg { font-size: 13.5px; margin-top: 8px; min-height: 18px; font-weight: 500; }
+.msg.erro { color: var(--erro); }
+.msg.ok { color: var(--sucesso); }
+
+/* Navegação inferior fixa */
+.tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+  display: flex; background: #fff; border-top: 1px solid var(--cinza-linha);
+  box-shadow: 0 -4px 20px rgba(15,23,42,.06);
+  padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+}
+.tab {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 6px 2px; cursor: pointer; color: #94a3b8; font-weight: 600; font-size: 10.5px;
+  border-radius: 10px; transition: color .15s;
+}
+.tab svg { width: 21px; height: 21px; }
+.tab.ativa { color: var(--azul); }
+.tab.ativa svg { filter: drop-shadow(0 2px 6px rgba(37,99,235,.35)); }
+.badge-plano {
+  display: inline-block; background: var(--azul-tinta); color: var(--azul-escuro); font-size: 11px;
+  font-weight: 700; padding: 3px 10px; border-radius: 999px; text-transform: uppercase; letter-spacing: .02em;
+}
+.topo { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+.topo .btn { width: auto; margin: 0; padding: 9px 14px; }
+.marca-dagua { text-align: center; font-size: 11px; color: var(--cinza-texto); margin-top: 20px; opacity: 0.6; }
+
+/* Calculadora */
+details { margin-top: 4px; }
+summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700; padding: 8px 0; }
+.price-grid { display: grid; grid-template-columns: 1fr 90px; gap: 8px 10px; align-items: center; margin-top: 10px; }
+.price-grid span { font-size: 12px; color: var(--cinza-texto); }
+.price-grid input { padding: 7px; font-size: 12px; }
+.note { font-size: 11.5px; color: var(--cinza-texto); margin-top: 10px; line-height: 1.5; }
+.item-card {
+  background: var(--cinza-claro); border: 1px solid var(--cinza-linha); border-left: 3px solid var(--azul);
+  border-radius: 14px; padding: 15px; margin-bottom: 12px;
+}
+.item-header { display: flex; justify-content: space-between; align-items: center; }
+.item-header span { font-size: 13px; font-weight: 700; color: var(--azul-escuro); }
+.remove-btn {
+  background: #fff; border: 1px solid var(--cinza-linha); color: var(--cinza-texto);
+  border-radius: 8px; width: 28px; height: 28px; font-size: 13px; cursor: pointer;
+}
+.remove-btn:hover { color: var(--erro); border-color: var(--erro); }
+.item-subtotal {
+  margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--cinza-linha);
+  display: flex; justify-content: space-between; font-size: 13px; color: var(--cinza-texto);
+}
+.item-subtotal b { color: var(--escuro); }
+.add-btn {
+  width: 100%; padding: 13px; border-radius: 14px; border: 1.5px dashed var(--ambar);
+  background: #fffbeb; color: var(--ambar-escuro); font-size: 14px; font-weight: 700; cursor: pointer; margin-bottom: 14px;
+}
+.add-btn:hover { background: #fef3c7; }
+.checkbox-row { display: flex; align-items: center; gap: 9px; margin-top: 14px; }
+.checkbox-row input { width: 19px; height: 19px; accent-color: var(--azul); }
+.checkbox-row label { margin: 0; color: var(--escuro); font-size: 14px; font-weight: 500; }
+.result {
+  background: var(--gradiente); border-radius: 18px; padding: 20px; text-align: center;
+  box-shadow: 0 10px 30px rgba(37,99,235,.28);
+}
+.result .label { color: #dbf3fb; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+.result .value { color: #fff; font-size: 34px; font-weight: 800; margin: 4px 0; font-family: "Manrope", sans-serif; }
+.breakdown { margin-top: 10px; font-size: 12px; color: #e0f2fe; text-align: left; }
+.breakdown div { display: flex; justify-content: space-between; padding: 2px 0; }
+.hidden { display: none !important; }
+
+/* Proposta cliente */
+.proposal { background: #fff; color: #0f172a; border-radius: 18px; overflow: hidden; border: 1px solid var(--cinza-linha); box-shadow: var(--sombra); }
+.proposal-header { background: var(--gradiente); padding: 24px 20px; color: #fff; }
+.proposal-header .brand { font-size: 21px; font-weight: 800; font-family: "Manrope", sans-serif; }
+.proposal-header .tagline { font-size: 12px; color: #e0f2fe; margin-top: 2px; }
+.proposal-numero { font-size: 11px; color: #d6f0fa; margin-top: 6px; }
+.proposal-meta { padding: 16px 20px 4px; }
+.proposal-items { padding: 6px 20px 4px; }
+.proposal-item { padding: 12px 0; border-bottom: 1px solid var(--cinza-linha); }
+.proposal-item .titulo { font-weight: 700; font-size: 14px; }
+.proposal-item .detalhe { font-size: 12px; color: var(--cinza-texto); margin-top: 2px; }
+.proposal-item .preco { font-weight: 700; color: var(--azul); font-size: 14px; margin-top: 6px; text-align: right; }
+.proposal-total { margin: 10px 20px 0; padding: 16px; border-radius: 14px; background: var(--escuro); color: #fff; display: flex; justify-content: space-between; align-items: center; }
+.proposal-total .lbl { font-size: 12px; color: #cbd5e1; text-transform: uppercase; font-weight: 600; }
+.proposal-total .val { font-size: 22px; font-weight: 800; color: var(--ambar); font-family: "Manrope", sans-serif; }
+.proposal-total-desconto { margin: 8px 20px 0; padding: 16px; border-radius: 14px; background: var(--sucesso); color: #fff; display: flex; justify-content: space-between; align-items: center; }
+.proposal-total-desconto .lbl { font-size: 12px; color: #dcfce7; text-transform: uppercase; font-weight: 600; }
+.proposal-total-desconto .val { font-size: 22px; font-weight: 800; color: #fff; font-family: "Manrope", sans-serif; }
+.proposal-condicoes { margin: 16px 20px 0; padding: 14px 16px; border-radius: 12px; background: var(--cinza-claro); border: 1px solid var(--cinza-linha); font-size: 11.5px; color: #475569; line-height: 1.6; }
+.proposal-condicoes b { display: block; color: var(--escuro); font-size: 12.5px; margin-bottom: 4px; }
+.proposal-footer { padding: 16px 20px 4px; font-size: 11px; color: var(--cinza-texto); line-height: 1.5; }
+.proposal-marca { padding: 10px 20px 18px; font-size: 10px; color: #94a3b8; text-align: center; border-top: 1px solid var(--cinza-linha); margin-top: 4px; }
+.action-row { display: flex; gap: 8px; margin-top: 14px; }
+.action-row button { flex: 1; }
+#whatsappText { width: 100%; min-height: 90px; margin-top: 10px; padding: 10px; border-radius: 10px; border: 1px solid var(--cinza-linha); font-size: 12px; font-family: inherit; }
+.voltar-link { display: block; text-align: center; color: var(--cinza-texto); font-size: 12.5px; margin-top: 14px; cursor: pointer; font-weight: 600; }
+.voltar-link:hover { color: var(--azul); }
+
+/* Clientes / Agenda */
+.lista-item {
+  background: #fff; border: 1px solid var(--cinza-linha); border-radius: 14px;
+  padding: 13px 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.lista-item[style*="cursor:pointer"]:hover { border-color: var(--azul); box-shadow: var(--sombra); }
+.lista-item .info { flex: 1; }
+.lista-item .titulo-item { font-weight: 700; font-size: 14.5px; color: var(--escuro); }
+.lista-item .sub-item { font-size: 12.5px; color: var(--cinza-texto); margin-top: 2px; }
+.lista-item .acoes { display: flex; gap: 6px; }
+.icon-btn {
+  background: #fff; border: 1px solid var(--cinza-linha); color: var(--cinza-texto);
+  border-radius: 8px; width: 30px; height: 30px; font-size: 13px; cursor: pointer; flex-shrink: 0;
+}
+.icon-btn:hover { color: var(--azul); border-color: var(--azul); }
+.icon-btn.perigo:hover { color: var(--erro); border-color: var(--erro); }
+.status-tag {
+  font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 999px; text-transform: uppercase; display: inline-block; margin-top: 5px; letter-spacing: .02em;
+}
+.status-agendado { background: var(--azul-tinta); color: var(--azul-escuro); }
+.status-concluido { background: var(--sucesso-bg); color: var(--sucesso); }
+.status-cancelado { background: var(--erro-bg); color: #b91c1c; }
+.dia-cabecalho { font-size: 12px; font-weight: 700; color: var(--cinza-texto); text-transform: uppercase; margin: 16px 0 8px; }
+.dia-cabecalho:first-child { margin-top: 0; }
+.vazio { color: var(--cinza-texto); font-size: 13.5px; text-align: center; padding: 28px 10px; }
+
+/* Calendário */
+.cal-topo { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
+.cal-cabecalho { font-size: 11px; color: var(--cinza-texto); margin-bottom: 4px; font-weight: 600; }
+.cal-dia { padding: 10px 0 7px; border-radius: 10px; font-size: 13.5px; cursor: pointer; position: relative; color: var(--escuro); font-weight: 500; }
+.cal-dia:hover { background: var(--cinza-claro); }
+.cal-tem { font-weight: 700; color: var(--azul-escuro); background: var(--azul-tinta); }
+.cal-hoje { outline: 1.5px solid var(--azul); outline-offset: -1.5px; }
+.cal-dot { display: block; width: 5px; height: 5px; border-radius: 50%; background: var(--ambar); margin: 3px auto 0; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="topo">
+    <div>
+      <h2 id="nomeEmpresa" style="margin-bottom: 4px;">Carregando...</h2>
+      <span class="badge-plano" id="badgePlano">...</span>
+    </div>
+    <button class="btn btn-secundario" onclick="sair()">Sair</button>
+  </div>
+
+  <div class="tabs">
+    <div class="tab ativa" data-tab="avulso">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/></svg>
+      <span>Orçamento</span>
+    </div>
+    <div class="tab" data-tab="contrato">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+      <span>Contrato</span>
+    </div>
+    <div class="tab" data-tab="clientes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span>Clientes</span>
+    </div>
+    <div class="tab" data-tab="agenda">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <span>Agenda</span>
+    </div>
+    <div class="tab" data-tab="config">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+      <span>Ajustes</span>
+    </div>
+  </div>
+
+  <div id="conteudo">
+    <div class="card"><p id="statusCarregando">Carregando seus dados...</p></div>
+  </div>
+
+  <p class="marca-dagua">feito no Estelar Orçamentos</p>
+</div>
+
+<script>
+const SUPABASE_URL = "https://lkankciqsldutuncuvyl.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_QAzF6HlUkYoAumTQCzKuVg_FEmhtwQ8";
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+function esc(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+
+let empresaAtual = null;
+
+const VALORES_PADRAO = { baseInstalacao:280, baseManutencao:100, baseHigienizacao:175, add9000:0, add12000:0, add18000:60, add24000:100, add30000:150, add36000:210, multMedio:1.15, multDificil:1.45, precoMetro:45, precoSuporte:60, precoEletrica:100, materiaisInstalacao:120, materiaisManutencao:35 };
+const DADOS_EMPRESA_PADRAO = { cnpj: '', endereco: '', telefone: '', email: '' };
+
+async function sair() {
+  await supabaseClient.auth.signOut();
+  window.location.href = "login.html";
+}
+
+async function iniciar() {
+  try {
+    const { data: { session }, error: erroSessao } = await supabaseClient.auth.getSession();
+    if (erroSessao) throw erroSessao;
+    if (!session) { window.location.href = "login.html"; return; }
+
+    let { data: empresa, error } = await supabaseClient.from("empresas").select("*").eq("user_id", session.user.id).maybeSingle();
+    if (error) throw error;
+
+    if (!empresa) {
+      const { data: novaEmpresa, error: erroCriacao } = await supabaseClient
+        .from("empresas")
+        .insert({ user_id: session.user.id, nome_empresa: "Minha Empresa", plano: "basico", precos: { config: VALORES_PADRAO, dadosEmpresa: DADOS_EMPRESA_PADRAO } })
+        .select().single();
+      if (erroCriacao) throw erroCriacao;
+      empresa = novaEmpresa;
+    }
+    if (!empresa.precos || !empresa.precos.config) {
+      empresa.precos = { config: Object.assign({}, VALORES_PADRAO), dadosEmpresa: Object.assign({}, DADOS_EMPRESA_PADRAO) };
+    }
+
+    empresaAtual = empresa;
+    document.getElementById("nomeEmpresa").textContent = empresaAtual.nome_empresa;
+    document.getElementById("badgePlano").textContent = empresaAtual.plano === "completo" ? "Plano Completo" : "Plano Básico";
+    mostrarAba("avulso");
+  } catch (e) {
+    document.getElementById("conteudo").innerHTML = '<div class="card"><p class="msg erro">Não foi possível carregar: ' + e.message + '</p></div>';
+  }
+}
+
+function ativarTab(nome) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("ativa", t.dataset.tab === nome));
+}
+
+document.querySelectorAll(".tab").forEach(tab => tab.addEventListener("click", () => mostrarAba(tab.dataset.tab)));
+
+function mostrarAba(nome) {
+  ativarTab(nome);
+  const conteudo = document.getElementById("conteudo");
+
+  if (nome === "avulso") { renderAvulso(); }
+  else if (nome === "clientes") { renderClientes(); }
+  else if (nome === "agenda") { renderAgenda(); }
+  else if (nome === "contrato") {
+    if (empresaAtual.plano !== "completo") {
+      conteudo.innerHTML = '<div class="card"><h3>Contrato de manutenção</h3><p style="color: var(--cinza-texto); font-size: 14px;">Este recurso faz parte do Plano Completo.</p></div>';
+      return;
+    }
+    conteudo.innerHTML = '<div class="card"><h3>Contrato de manutenção</h3><p style="color: var(--cinza-texto); font-size: 14px;">Próximo passo: trazer a calculadora de contratos pra dentro desta aba.</p></div>';
+  } else if (nome === "config") {
+    const emp = empresaAtual.precos.dadosEmpresa || {};
+    conteudo.innerHTML = `<div class="card">
+      <h3>Dados da empresa</h3>
+      <p style="color: var(--cinza-texto); font-size: 13px; margin-top: -6px;">Esses dados aparecem nos orçamentos e contratos gerados para o cliente.</p>
+      <label for="inputNome">Nome da empresa</label>
+      <input type="text" id="inputNome" value="${esc(empresaAtual.nome_empresa)}">
+      <label>CNPJ</label><input type="text" id="cfgCnpj" placeholder="00.000.000/0000-00" value="${esc(emp.cnpj || '')}">
+      <label>Endereço / Cidade</label><input type="text" id="cfgEndereco" placeholder="Bairro, cidade - UF" value="${esc(emp.endereco || '')}">
+      <label>Telefone comercial</label><input type="text" id="cfgTelefone" placeholder="(18) 99169-0009" value="${esc(emp.telefone || '')}">
+      <label>E-mail comercial</label><input type="text" id="cfgEmail" placeholder="contato@empresa.com" value="${esc(emp.email || '')}">
+      <button class="btn" onclick="salvarDadosEmpresa()">Salvar</button>
+      <div class="msg" id="msgConfig"></div></div>`;
+  }
+}
+
+async function salvarDadosEmpresa() {
+  const novoNome = document.getElementById("inputNome").value.trim();
+  const msgEl = document.getElementById("msgConfig");
+  if (!novoNome) { msgEl.className = "msg erro"; msgEl.textContent = "Digite um nome válido."; return; }
+  const dadosEmpresa = {
+    cnpj: document.getElementById('cfgCnpj').value.trim(),
+    endereco: document.getElementById('cfgEndereco').value.trim(),
+    telefone: document.getElementById('cfgTelefone').value.trim(),
+    email: document.getElementById('cfgEmail').value.trim()
+  };
+  const novosPrecos = Object.assign({}, empresaAtual.precos, { dadosEmpresa });
+  const { error } = await supabaseClient.from("empresas").update({ nome_empresa: novoNome, precos: novosPrecos }).eq("id", empresaAtual.id);
+  if (error) { msgEl.className = "msg erro"; msgEl.textContent = "Erro ao salvar."; return; }
+  empresaAtual.nome_empresa = novoNome;
+  empresaAtual.precos = novosPrecos;
+  document.getElementById("nomeEmpresa").textContent = novoNome;
+  msgEl.className = "msg ok"; msgEl.textContent = "Salvo!";
+}
+
+/* ===================== CLIENTES ===================== */
+
+let clientesCache = [];
+
+async function renderClientes() {
+  const conteudo = document.getElementById("conteudo");
+  conteudo.innerHTML = `
+    <div class="card">
+      <h3>Novo cliente</h3>
+      <label>Nome</label><input type="text" id="clNome" placeholder="Nome do cliente">
+      <label>Telefone</label><input type="text" id="clTelefone" placeholder="(18) 99999-9999">
+      <label>E-mail</label><input type="text" id="clEmail" placeholder="cliente@email.com">
+      <label>Endereço</label><input type="text" id="clEndereco" placeholder="Rua, número, bairro, cidade">
+      <label>Observações</label><input type="text" id="clObs" placeholder="Opcional">
+      <div class="msg" id="clMsg"></div>
+      <button class="btn" id="clSalvarBtn">Salvar cliente</button>
+    </div>
+    <div class="card">
+      <h3>Clientes cadastrados</h3>
+      <input type="text" id="clBusca" placeholder="Buscar por nome, telefone ou e-mail...">
+      <div id="clLista" style="margin-top:12px;"><p class="vazio">Carregando...</p></div>
+    </div>
+  `;
+  document.getElementById("clSalvarBtn").addEventListener("click", clSalvarNovo);
+  document.getElementById("clBusca").addEventListener("input", (e) => clRenderLista(e.target.value.trim().toLowerCase()));
+  await clCarregarLista();
+}
+
+async function clCarregarLista() {
+  const { data, error } = await supabaseClient.from("clientes").select("*").eq("empresa_id", empresaAtual.id).order("nome");
+  if (error) { document.getElementById("clLista").innerHTML = '<p class="msg erro">Erro ao carregar clientes.</p>'; return; }
+  clientesCache = data;
+  clRenderLista('');
+}
+
+function clRenderLista(termo) {
+  const listaEl = document.getElementById("clLista");
+  const filtrados = !termo ? clientesCache : clientesCache.filter(c =>
+    (c.nome || '').toLowerCase().includes(termo) ||
+    (c.telefone || '').toLowerCase().includes(termo) ||
+    (c.email || '').toLowerCase().includes(termo)
+  );
+  if (!clientesCache.length) { listaEl.innerHTML = '<p class="vazio">Nenhum cliente cadastrado ainda.</p>'; return; }
+  if (!filtrados.length) { listaEl.innerHTML = '<p class="vazio">Nenhum cliente encontrado.</p>'; return; }
+  listaEl.innerHTML = filtrados.map(c => `
+    <div class="lista-item" style="cursor:pointer;" data-ver-cliente="${c.id}">
+      <div class="info">
+        <div class="titulo-item">${esc(c.nome)}</div>
+        <div class="sub-item">${esc([c.telefone, c.email].filter(Boolean).join(' · ') || '—')}</div>
+        ${c.endereco ? `<div class="sub-item">${esc(c.endereco)}</div>` : ''}
+      </div>
+      <div class="acoes">
+        <button class="icon-btn perigo" data-del-cliente="${c.id}">✕</button>
+      </div>
+    </div>
+  `).join('');
+  listaEl.querySelectorAll('[data-ver-cliente]').forEach(item => {
+    item.addEventListener('click', (e) => {
+      if (e.target.closest('[data-del-cliente]')) return;
+      clVerDetalhes(item.getAttribute('data-ver-cliente'));
+    });
+  });
+  listaEl.querySelectorAll('[data-del-cliente]').forEach(btn => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); clExcluir(btn.getAttribute('data-del-cliente')); });
+  });
+}
+
+async function clVerDetalhes(id) {
+  const cliente = clientesCache.find(c => c.id === id);
+  if (!cliente) return;
+  const conteudo = document.getElementById("conteudo");
+  conteudo.innerHTML = `<div class="card"><p class="vazio">Carregando...</p></div>`;
+
+  const [{ data: orcamentos }, { data: agendaItens }, { data: osItens }] = await Promise.all([
+    supabaseClient.from('orcamentos').select('*').eq('cliente_id', id).order('created_at', { ascending: false }),
+    supabaseClient.from('agenda').select('*').eq('cliente_id', id).order('data_hora', { ascending: false }),
+    supabaseClient.from('ordens_servico').select('*').eq('cliente_id', id).order('created_at', { ascending: false })
+  ]);
+
+  const orcamentosHtml = (orcamentos && orcamentos.length)
+    ? orcamentos.map(o => `
+        <div class="lista-item" style="cursor:pointer;" data-ver-orcamento="${o.id}">
+          <div class="info">
+            <div class="titulo-item">${(o.dados && o.dados.numero) || 'Orçamento'} · ${money(o.valor_total || 0)}</div>
+            <div class="sub-item">${new Date(o.created_at).toLocaleDateString('pt-BR')} · ${o.tipo === 'avulso' ? 'Orçamento avulso' : o.tipo}</div>
+          </div>
+        </div>`).join('')
+    : '<p class="vazio">Nenhum orçamento salvo ainda.</p>';
+
+  const agendaHtml = (agendaItens && agendaItens.length)
+    ? agendaItens.map(a => `
+        <div class="lista-item" style="cursor:pointer;" data-abrir-compromisso="${a.id}">
+          <div class="info">
+            <div class="titulo-item">${esc(a.titulo)}</div>
+            <div class="sub-item">${agFormatarData(a.data_hora)} · ${agTipoLabel(a.tipo)}</div>
+            <span class="status-tag status-${a.status}">${a.status}</span>
+          </div>
+        </div>`).join('')
+    : '<p class="vazio">Nenhum compromisso registrado ainda.</p>';
+
+  const osStatusLabel = { aberta: 'Aberta', em_andamento: 'Em andamento', concluida: 'Concluída' };
+  const osHtml = (osItens && osItens.length)
+    ? osItens.map(o => `
+        <div class="lista-item" style="cursor:pointer;" data-abrir-os="${o.id}">
+          <div class="info">
+            <div class="titulo-item">${esc(o.descricao || 'Ordem de serviço')} · ${money(o.valor || 0)}</div>
+            <div class="sub-item">${new Date(o.created_at).toLocaleDateString('pt-BR')}</div>
+            <span class="status-tag status-${o.status === 'concluida' ? 'concluido' : 'agendado'}">${osStatusLabel[o.status] || o.status}</span>
+          </div>
+        </div>`).join('')
+    : '<p class="vazio">Nenhuma ordem de serviço registrada ainda.</p>';
+
+  conteudo.innerHTML = `
+    <div class="card">
+      <h3>${esc(cliente.nome)}</h3>
+      <div class="sub-item">${esc([cliente.telefone, cliente.email].filter(Boolean).join(' · ') || '—')}</div>
+      ${cliente.endereco ? `<div class="sub-item">${esc(cliente.endereco)}</div>` : ''}
+      ${cliente.observacoes ? `<div class="sub-item" style="margin-top:6px;">${esc(cliente.observacoes)}</div>` : ''}
+    </div>
+    <div class="card">
+      <h3>Orçamentos</h3>
+      ${orcamentosHtml}
+    </div>
+    <div class="card">
+      <h3>Ordens de serviço</h3>
+      ${osHtml}
+    </div>
+    <div class="card">
+      <h3>Agenda</h3>
+      ${agendaHtml}
+    </div>
+    <div class="voltar-link" id="clVoltarBtn">← Voltar para a lista de clientes</div>
+  `;
+  document.getElementById('clVoltarBtn').addEventListener('click', renderClientes);
+  conteudo.querySelectorAll('[data-ver-orcamento]').forEach(el => {
+    el.addEventListener('click', () => clVerOrcamento(el.getAttribute('data-ver-orcamento'), id));
+  });
+  conteudo.querySelectorAll('[data-abrir-compromisso]').forEach(el => {
+    el.addEventListener('click', () => clAbrirAgendaItem(el.getAttribute('data-abrir-compromisso')));
+  });
+  conteudo.querySelectorAll('[data-abrir-os]').forEach(el => {
+    el.addEventListener('click', async () => {
+      const osRowId = el.getAttribute('data-abrir-os');
+      const { data: osRow } = await supabaseClient.from('ordens_servico').select('agenda_id, orcamento_id').eq('id', osRowId).single();
+      osAbrirComContexto({ agendaId: osRow.agenda_id || null, orcamentoId: osRow.orcamento_id || null });
+    });
+  });
+}
+
+async function clVerOrcamento(orcamentoId, clienteId) {
+  const conteudo = document.getElementById("conteudo");
+  conteudo.innerHTML = '<div class="card"><p class="vazio">Carregando...</p></div>';
+  const { data: orc, error } = await supabaseClient.from('orcamentos').select('*').eq('id', orcamentoId).single();
+  if (error || !orc) { conteudo.innerHTML = '<div class="card"><p class="msg erro">Não foi possível carregar o orçamento.</p></div>'; return; }
+
+  const itens = (orc.dados && orc.dados.items) || [];
+  const itensHtml = itens.length
+    ? itens.map(it => {
+        const d = avItemDescricaoCliente(it);
+        return `<div class="lista-item"><div class="info"><div class="titulo-item">${esc(d.titulo)}</div><div class="sub-item">${esc(d.detalhe)}</div></div></div>`;
+      }).join('')
+    : '<p class="vazio">Sem detalhes de itens salvos.</p>';
+
+  conteudo.innerHTML = `
+    <div class="card">
+      <h3>${(orc.dados && orc.dados.numero) || 'Orçamento'}</h3>
+      <div class="sub-item">${new Date(orc.created_at).toLocaleDateString('pt-BR')}</div>
+      <div class="item-subtotal" style="margin-top:10px;"><span>Valor total</span><b>${money(orc.valor_total || 0)}</b></div>
+    </div>
+    <div class="card"><h3>Itens</h3>${itensHtml}</div>
+    <button class="btn btn-ambar" id="orcCriarOSBtn">Transformar em Ordem de Serviço</button>
+    <div class="voltar-link" id="orcVoltarBtn">← Voltar para o cliente</div>
+  `;
+  document.getElementById('orcVoltarBtn').addEventListener('click', () => clVerDetalhes(clienteId));
+  document.getElementById('orcCriarOSBtn').addEventListener('click', () => osAbrirComContexto({ agendaId: null, orcamentoId }));
+}
+
+async function irParaFichaCliente(clienteId) {
+  if (!clienteId) return;
+  ativarTab('clientes');
+  await renderClientes();
+  await clVerDetalhes(clienteId);
+}
+
+async function clAbrirAgendaItem(agendaId) {
+  ativarTab('agenda');
+  await renderAgenda();
+  agAgendaSelecionadaId = agendaId;
+  agModo = 'compromisso';
+  await agAtualizarDinamico();
+}
+
+async function osAbrirComContexto(ctx) {
+  ativarTab('agenda');
+  await renderAgenda();
+  osContexto = ctx;
+  agModo = 'os';
+  await agAtualizarDinamico();
+}
+
+async function clSalvarNovo() {
+  const nome = document.getElementById('clNome').value.trim();
+  const msg = document.getElementById('clMsg');
+  if (!nome) { msg.className = 'msg erro'; msg.textContent = 'Digite o nome do cliente.'; return; }
+  const { error } = await supabaseClient.from('clientes').insert({
+    empresa_id: empresaAtual.id,
+    nome,
+    telefone: document.getElementById('clTelefone').value.trim(),
+    email: document.getElementById('clEmail').value.trim(),
+    endereco: document.getElementById('clEndereco').value.trim(),
+    observacoes: document.getElementById('clObs').value.trim()
+  });
+  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar cliente.'; return; }
+  ['clNome','clTelefone','clEmail','clEndereco','clObs'].forEach(id => document.getElementById(id).value = '');
+  msg.className = 'msg ok'; msg.textContent = 'Cliente salvo!';
+  await clCarregarLista();
+}
+
+async function clExcluir(id) {
+  if (!confirm('Remover este cliente?')) return;
+  await supabaseClient.from('clientes').delete().eq('id', id);
+  await clCarregarLista();
+}
+
+/* ===================== AGENDA (CALENDÁRIO + OS) ===================== */
+
+let agModo = 'calendario';
+let agCalendarRef = null;
+let agDiaSelecionado = null;
+let agAgendaSelecionadaId = null;
+let agAgendaAtualObj = null;
+let osContexto = null;
+
+async function renderAgenda() {
+  agModo = 'calendario';
+  if (!agCalendarRef) agCalendarRef = new Date();
+  const conteudo = document.getElementById("conteudo");
+  const { data: clientes } = await supabaseClient.from("clientes").select("id,nome").eq("empresa_id", empresaAtual.id).order("nome");
+  const opcoesClientes = (clientes || []).map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('');
+
+  conteudo.innerHTML = `
+    <div class="card">
+      <h3>Novo compromisso</h3>
+      <label>Título</label><input type="text" id="agTitulo" placeholder="Ex: Visita técnica, instalação...">
+      <label>Tipo</label>
+      <select id="agTipo">
+        <option value="visita">Visita técnica</option>
+        <option value="instalacao">Instalação</option>
+        <option value="manutencao">Manutenção</option>
+        <option value="outro">Outro</option>
+      </select>
+      <label>Cliente (opcional)</label>
+      <select id="agCliente"><option value="">— nenhum —</option>${opcoesClientes}</select>
+      <label>Data e hora</label><input type="datetime-local" id="agDataHora">
+      <label>Observações</label><input type="text" id="agObs" placeholder="Opcional">
+      <div class="msg" id="agMsg"></div>
+      <button class="btn" id="agSalvarBtn">Adicionar à agenda</button>
+    </div>
+    <div class="card" id="agDinamicoCard"><p class="vazio">Carregando...</p></div>
+  `;
+  document.getElementById("agSalvarBtn").addEventListener("click", agSalvarNovo);
+  await agAtualizarDinamico();
+}
+
+function agTipoLabel(t) {
+  return { visita: 'Visita técnica', instalacao: 'Instalação', manutencao: 'Manutenção', outro: 'Outro' }[t] || t;
+}
+
+function agFormatarData(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }) + ' às ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+async function agSalvarNovo() {
+  const titulo = document.getElementById('agTitulo').value.trim();
+  const dataHora = document.getElementById('agDataHora').value;
+  const msg = document.getElementById('agMsg');
+  if (!titulo || !dataHora) { msg.className = 'msg erro'; msg.textContent = 'Preencha título e data/hora.'; return; }
+  const clienteId = document.getElementById('agCliente').value || null;
+  const { error } = await supabaseClient.from('agenda').insert({
+    empresa_id: empresaAtual.id,
+    cliente_id: clienteId,
+    titulo,
+    tipo: document.getElementById('agTipo').value,
+    data_hora: new Date(dataHora).toISOString(),
+    observacoes: document.getElementById('agObs').value.trim()
+  });
+  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar.'; return; }
+  const dataObj = new Date(dataHora);
+  ['agTitulo','agDataHora','agObs'].forEach(id => document.getElementById(id).value = '');
+  msg.className = 'msg ok'; msg.textContent = 'Adicionado!';
+  agModo = 'calendario';
+  agCalendarRef = new Date(dataObj.getFullYear(), dataObj.getMonth(), 1);
+  await agAtualizarDinamico();
+}
+
+async function agAtualizarStatus(id, status) {
+  await supabaseClient.from('agenda').update({ status }).eq('id', id);
+  await agAtualizarDinamico();
+}
+
+async function agAtualizarDinamico() {
+  const card = document.getElementById('agDinamicoCard');
+  card.innerHTML = '<p class="vazio">Carregando...</p>';
+  if (agModo === 'calendario') await agRenderCalendario(card);
+  else if (agModo === 'dia') await agRenderDia(card);
+  else if (agModo === 'compromisso') await agRenderCompromisso(card);
+  else if (agModo === 'os') await agRenderOS(card);
+}
+
+function agParaInputDatetime(iso) {
+  const d = new Date(iso);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+async function agRenderCompromisso(card) {
+  const { data: ag } = await supabaseClient.from('agenda').select('*, clientes(nome)').eq('id', agAgendaSelecionadaId).single();
+  agAgendaAtualObj = ag;
+  card.innerHTML = `
+    <div class="voltar-link" id="cpVoltarBtn" style="margin-top:0;margin-bottom:10px;text-align:left;">← Voltar</div>
+    <h3 style="font-size:15px;">${ag.clientes ? esc(ag.clientes.nome) : 'Sem cliente vinculado'}</h3>
+    ${ag.cliente_id ? `<div class="voltar-link" id="cpVerClienteBtn" style="margin-top:0; margin-bottom:12px; text-align:left;">Ver ficha completa do cliente →</div>` : ''}
+    <label>Título</label><input type="text" id="cpTitulo" value="${esc(ag.titulo || '')}">
+    <label>Tipo</label>
+    <select id="cpTipo">
+      <option value="visita" ${ag.tipo === 'visita' ? 'selected' : ''}>Visita técnica</option>
+      <option value="instalacao" ${ag.tipo === 'instalacao' ? 'selected' : ''}>Instalação</option>
+      <option value="manutencao" ${ag.tipo === 'manutencao' ? 'selected' : ''}>Manutenção</option>
+      <option value="outro" ${ag.tipo === 'outro' ? 'selected' : ''}>Outro</option>
+    </select>
+    <label>Data e hora</label><input type="datetime-local" id="cpDataHora" value="${agParaInputDatetime(ag.data_hora)}">
+    <label>Status</label>
+    <select id="cpStatus">
+      <option value="agendado" ${ag.status === 'agendado' ? 'selected' : ''}>Agendado</option>
+      <option value="concluido" ${ag.status === 'concluido' ? 'selected' : ''}>Concluído</option>
+      <option value="cancelado" ${ag.status === 'cancelado' ? 'selected' : ''}>Cancelado</option>
+    </select>
+    <label>Observações</label><input type="text" id="cpObs" value="${esc(ag.observacoes || '')}">
+    <div class="msg" id="cpMsg"></div>
+    <button class="btn" id="cpSalvarBtn">Salvar alterações</button>
+    <button class="btn btn-secundario" id="cpAbrirOSBtn">Ver / criar Ordem de Serviço</button>
+  `;
+  document.getElementById('cpVoltarBtn').addEventListener('click', () => { agModo = 'dia'; agAtualizarDinamico(); });
+  document.getElementById('cpSalvarBtn').addEventListener('click', cpSalvar);
+  document.getElementById('cpAbrirOSBtn').addEventListener('click', () => osAbrirComContexto({ agendaId: agAgendaSelecionadaId, orcamentoId: null }));
+  if (ag.cliente_id) document.getElementById('cpVerClienteBtn').addEventListener('click', () => irParaFichaCliente(ag.cliente_id));
+}
+
+async function cpSalvar() {
+  const msg = document.getElementById('cpMsg');
+  const dataHora = document.getElementById('cpDataHora').value;
+  if (!dataHora) { msg.className = 'msg erro'; msg.textContent = 'Escolha data e hora.'; return; }
+  const { error } = await supabaseClient.from('agenda').update({
+    titulo: document.getElementById('cpTitulo').value.trim(),
+    tipo: document.getElementById('cpTipo').value,
+    data_hora: new Date(dataHora).toISOString(),
+    status: document.getElementById('cpStatus').value,
+    observacoes: document.getElementById('cpObs').value.trim()
+  }).eq('id', agAgendaSelecionadaId);
+  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar.'; return; }
+  msg.className = 'msg ok'; msg.textContent = 'Salvo!';
+}
+
+async function agRenderCalendario(card) {
+  const ref = agCalendarRef;
+  const ano = ref.getFullYear(), mes = ref.getMonth();
+  const primeiroDia = new Date(ano, mes, 1);
+  const ultimoDia = new Date(ano, mes + 1, 0);
+  const inicioRange = new Date(ano, mes, 1, 0, 0, 0).toISOString();
+  const fimRange = new Date(ano, mes, ultimoDia.getDate(), 23, 59, 59).toISOString();
+
+  const { data } = await supabaseClient
+    .from('agenda')
+    .select('id, data_hora')
+    .eq('empresa_id', empresaAtual.id)
+    .neq('status', 'cancelado')
+    .gte('data_hora', inicioRange)
+    .lte('data_hora', fimRange);
+
+  const porDia = {};
+  (data || []).forEach(a => {
+    const dia = new Date(a.data_hora).getDate();
+    porDia[dia] = (porDia[dia] || 0) + 1;
+  });
+
+  const nomeMes = ref.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  const primeiroDiaSemana = primeiroDia.getDay();
+  const totalDias = ultimoDia.getDate();
+  const diasSemana = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+  const hoje = new Date();
+
+  let celulas = '';
+  for (let i = 0; i < primeiroDiaSemana; i++) celulas += `<div></div>`;
+  for (let d = 1; d <= totalDias; d++) {
+    const tem = porDia[d];
+    const ehHoje = hoje.getFullYear() === ano && hoje.getMonth() === mes && hoje.getDate() === d;
+    celulas += `<div class="cal-dia ${tem ? 'cal-tem' : ''} ${ehHoje ? 'cal-hoje' : ''}" data-dia="${d}">${d}${tem ? `<span class="cal-dot"></span>` : ''}</div>`;
+  }
+
+  card.innerHTML = `
+    <div class="cal-topo">
+      <button class="icon-btn" id="calAnteriorBtn">‹</button>
+      <span style="font-weight:700; text-transform:capitalize;">${nomeMes}</span>
+      <button class="icon-btn" id="calProximoBtn">›</button>
+    </div>
+    <div class="cal-grid cal-cabecalho">${diasSemana.map(d => `<div>${d}</div>`).join('')}</div>
+    <div class="cal-grid">${celulas}</div>
+  `;
+
+  document.getElementById('calAnteriorBtn').addEventListener('click', () => { agCalendarRef = new Date(ano, mes - 1, 1); agAtualizarDinamico(); });
+  document.getElementById('calProximoBtn').addEventListener('click', () => { agCalendarRef = new Date(ano, mes + 1, 1); agAtualizarDinamico(); });
+  card.querySelectorAll('[data-dia]').forEach(el => {
+    el.addEventListener('click', () => {
+      const dia = parseInt(el.getAttribute('data-dia'));
+      agDiaSelecionado = new Date(ano, mes, dia);
+      agModo = 'dia';
+      agAtualizarDinamico();
+    });
+  });
+}
+
+async function agRenderDia(card) {
+  const dia = agDiaSelecionado;
+  const inicio = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate(), 0, 0, 0).toISOString();
+  const fim = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate(), 23, 59, 59).toISOString();
+  const { data } = await supabaseClient
+    .from('agenda')
+    .select('*, clientes(nome)')
+    .eq('empresa_id', empresaAtual.id)
+    .neq('status', 'cancelado')
+    .gte('data_hora', inicio).lte('data_hora', fim)
+    .order('data_hora');
+
+  const lista = (data && data.length) ? data.map(a => `
+    <div class="lista-item" style="cursor:pointer;" data-agenda="${a.id}">
+      <div class="info">
+        <div class="titulo-item">${a.clientes ? a.clientes.nome : (a.titulo || 'Sem cliente')}</div>
+        <div class="sub-item">${new Date(a.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · ${agTipoLabel(a.tipo)}</div>
+        <span class="status-tag status-${a.status}">${a.status}</span>
+      </div>
+    </div>
+  `).join('') : '<p class="vazio">Nenhum compromisso neste dia.</p>';
+
+  card.innerHTML = `
+    <div class="voltar-link" id="diaVoltarBtn" style="margin-top:0; margin-bottom:10px; text-align:left;">← Voltar ao calendário</div>
+    <h3 style="font-size:15px; text-transform:capitalize;">${dia.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' })}</h3>
+    ${lista}
+  `;
+  document.getElementById('diaVoltarBtn').addEventListener('click', () => { agModo = 'calendario'; agAtualizarDinamico(); });
+  card.querySelectorAll('[data-agenda]').forEach(el => {
+    el.addEventListener('click', () => { agAgendaSelecionadaId = el.getAttribute('data-agenda'); agModo = 'compromisso'; agAtualizarDinamico(); });
+  });
+}
+
+async function agRenderOS(card) {
+  let clienteInfo = null, clienteId = null, cabecalhoTitulo = '', cabecalhoSub = '', tipoPadrao = 'instalacao', osExistente = null, prefillItem = null, prefillValor = null;
+
+  if (osContexto.agendaId) {
+    const { data: ag } = await supabaseClient.from('agenda').select('*, clientes(nome,telefone,endereco)').eq('id', osContexto.agendaId).single();
+    agAgendaAtualObj = ag;
+    clienteInfo = ag.clientes;
+    clienteId = ag.cliente_id;
+    cabecalhoTitulo = ag.clientes ? ag.clientes.nome : ag.titulo;
+    cabecalhoSub = agFormatarData(ag.data_hora) + ' · ' + agTipoLabel(ag.tipo);
+    tipoPadrao = ag.tipo === 'manutencao' ? 'manutencao' : 'instalacao';
+    const { data: os } = await supabaseClient.from('ordens_servico').select('*').eq('agenda_id', osContexto.agendaId).maybeSingle();
+    osExistente = os;
+  } else if (osContexto.orcamentoId) {
+    const { data: orc } = await supabaseClient.from('orcamentos').select('*, clientes(nome,telefone,endereco)').eq('id', osContexto.orcamentoId).single();
+    clienteInfo = orc.clientes;
+    clienteId = orc.cliente_id;
+    cabecalhoTitulo = orc.clientes ? orc.clientes.nome : 'Cliente';
+    cabecalhoSub = ((orc.dados && orc.dados.numero) || 'Orçamento') + ' · ' + money(orc.valor_total || 0);
+    const itens = (orc.dados && orc.dados.items) || [];
+    if (itens.length) { prefillItem = itens[0]; tipoPadrao = itens[0].tipo; }
+    prefillValor = orc.valor_total;
+    const { data: os } = await supabaseClient.from('ordens_servico').select('*').eq('orcamento_id', osContexto.orcamentoId).maybeSingle();
+    osExistente = os;
+  }
+  osContexto.clienteId = clienteId;
+  osContexto.clienteNome = clienteInfo ? clienteInfo.nome : null;
+
+  const cabecalho = `
+    <div class="voltar-link" id="osVoltarBtn" style="margin-top:0;margin-bottom:10px;text-align:left;">← Voltar</div>
+    <h3 style="font-size:15px;">${esc(cabecalhoTitulo)}</h3>
+    <div class="sub-item">${cabecalhoSub}</div>
+    ${clienteInfo && clienteInfo.telefone ? `<div class="sub-item">${esc(clienteInfo.telefone)}</div>` : ''}
+    ${clienteInfo && clienteInfo.endereco ? `<div class="sub-item">${esc(clienteInfo.endereco)}</div>` : ''}
+    ${clienteId ? `<div class="voltar-link" id="osVerClienteBtn" style="margin-top:6px; margin-bottom:0; text-align:left;">Ver ficha completa do cliente →</div>` : ''}
+  `;
+
+  const cfgEstruturado = construirConfigEstruturado(empresaAtual.precos.config);
+  const dadosExistentes = (osExistente && osExistente.dados) ? osExistente.dados : (prefillItem || { tipo: tipoPadrao, porte: '12000', dificuldade: 'medio', metros: 3, suporte: false, eletrica220: false, pecasDesc: '', pecas: 0, extraDesc: '', extraValor: 0 });
+  const valorInicial = osExistente ? osExistente.valor : (prefillValor != null ? prefillValor : '');
+  const valorPreenchidoAutomaticamente = !osExistente && prefillValor != null;
+
+  const osFormHtml = `
+    <label>Tipo de serviço</label>
+    <select id="osTipo">
+      <option value="instalacao" ${dadosExistentes.tipo === 'instalacao' ? 'selected' : ''}>Instalação</option>
+      <option value="manutencao" ${dadosExistentes.tipo === 'manutencao' ? 'selected' : ''}>Manutenção</option>
+      <option value="higienizacao" ${dadosExistentes.tipo === 'higienizacao' ? 'selected' : ''}>Higienização</option>
+    </select>
+    <label>Porte do aparelho (BTUs)</label>
+    <select id="osPorte">${['9000','12000','18000','24000','30000','36000'].map(v => `<option value="${v}" ${dadosExistentes.porte === v ? 'selected' : ''}>${v === '36000' ? '36.000+' : (parseInt(v)/1000) + '.000'}</option>`).join('')}</select>
+    <label>Dificuldade de acesso</label>
+    <select id="osDificuldade">
+      <option value="facil" ${dadosExistentes.dificuldade === 'facil' ? 'selected' : ''}>Fácil</option>
+      <option value="medio" ${dadosExistentes.dificuldade === 'medio' ? 'selected' : ''}>Médio</option>
+      <option value="dificil" ${dadosExistentes.dificuldade === 'dificil' ? 'selected' : ''}>Difícil</option>
+    </select>
+    <div id="osCamposInstalacao" class="${dadosExistentes.tipo === 'instalacao' ? '' : 'hidden'}">
+      <label>Distância entre unidades (metros)</label>
+      <input type="number" min="0" step="0.5" id="osMetros" value="${dadosExistentes.metros || 0}">
+      <div class="checkbox-row"><input type="checkbox" id="osSuporte" ${dadosExistentes.suporte ? 'checked' : ''}><label>Suporte / estrutura extra</label></div>
+      <div class="checkbox-row"><input type="checkbox" id="osEletrica220" ${dadosExistentes.eletrica220 ? 'checked' : ''}><label>Instalação elétrica 220V</label></div>
+    </div>
+    <div id="osCamposManutencao" class="${dadosExistentes.tipo === 'manutencao' ? '' : 'hidden'}">
+      <label>Peça(s) — descrição</label>
+      <input type="text" id="osPecasDesc" value="${esc(dadosExistentes.pecasDesc || '')}">
+      <label>Valor da(s) peça(s) (R$)</label>
+      <input type="number" min="0" id="osPecas" value="${dadosExistentes.pecas || 0}">
+    </div>
+    <label>Custo extra personalizado (opcional)</label>
+    <input type="text" placeholder="Descrição" id="osExtraDesc" value="${esc(dadosExistentes.extraDesc || '')}">
+    <input type="number" min="0" placeholder="Valor (R$)" id="osExtraValor" value="${dadosExistentes.extraValor || 0}" style="margin-top:6px;">
+    <div class="item-subtotal" style="margin-top:14px;"><span>Valor calculado (sugestão)</span><b id="osValorCalculado">R$ 0,00</b></div>
+    <label>Valor final da OS (R$)</label>
+    <input type="number" id="osValor" value="${valorInicial}" ${valorPreenchidoAutomaticamente ? 'data-editado-manualmente="1"' : ''}>
+    ${valorPreenchidoAutomaticamente ? '<div class="note">Valor trazido do orçamento original. Edite se necessário.</div>' : ''}
+    <label>Observações internas</label>
+    <input type="text" id="osObs" value="${esc(osExistente ? (osExistente.observacoes || '') : '')}" placeholder="Opcional">
+  `;
+
+  function osLerItemAtual() {
+    return {
+      tipo: document.getElementById('osTipo').value,
+      porte: document.getElementById('osPorte').value,
+      dificuldade: document.getElementById('osDificuldade').value,
+      metros: parseFloat(document.getElementById('osMetros').value) || 0,
+      suporte: document.getElementById('osSuporte').checked,
+      eletrica220: document.getElementById('osEletrica220').checked,
+      pecasDesc: document.getElementById('osPecasDesc').value,
+      pecas: parseFloat(document.getElementById('osPecas').value) || 0,
+      extraDesc: document.getElementById('osExtraDesc').value,
+      extraValor: parseFloat(document.getElementById('osExtraValor').value) || 0
+    };
+  }
+
+  function osRecalcular() {
+    document.getElementById('osCamposInstalacao').classList.toggle('hidden', document.getElementById('osTipo').value !== 'instalacao');
+    document.getElementById('osCamposManutencao').classList.toggle('hidden', document.getElementById('osTipo').value !== 'manutencao');
+    const it = osLerItemAtual();
+    const r = avCalcItem(it, cfgEstruturado);
+    document.getElementById('osValorCalculado').textContent = money(r.total);
+    const campoValor = document.getElementById('osValor');
+    if (!campoValor.dataset.editadoManualmente) campoValor.value = r.total.toFixed(2);
+  }
+
+  if (osExistente) {
+    card.innerHTML = cabecalho + `
+      <h3 style="font-size:15px; margin-top:16px;">Ordem de serviço</h3>
+      <label>Status</label>
+      <select id="osStatus">
+        <option value="aberta" ${osExistente.status === 'aberta' ? 'selected' : ''}>Aberta</option>
+        <option value="em_andamento" ${osExistente.status === 'em_andamento' ? 'selected' : ''}>Em andamento</option>
+        <option value="concluida" ${osExistente.status === 'concluida' ? 'selected' : ''}>Concluída</option>
+      </select>
+      ${osFormHtml}
+      <button class="btn" id="osSalvarBtn">Salvar OS</button>
+      <div class="msg" id="osMsg"></div>
+    `;
+    document.getElementById('osSalvarBtn').addEventListener('click', () => osSalvar(osExistente.id));
+  } else {
+    card.innerHTML = cabecalho + `
+      <h3 style="font-size:15px; margin-top:16px;">Criar ordem de serviço</h3>
+      ${osFormHtml}
+      <button class="btn" id="osSalvarBtn">Criar OS</button>
+      <div class="msg" id="osMsg"></div>
+    `;
+    document.getElementById('osSalvarBtn').addEventListener('click', () => osSalvar(null));
+  }
+  document.getElementById('osVoltarBtn').addEventListener('click', voltarDoOS);
+  if (clienteId) document.getElementById('osVerClienteBtn').addEventListener('click', () => irParaFichaCliente(clienteId));
+  ['osTipo','osPorte','osDificuldade','osMetros','osSuporte','osEletrica220','osPecasDesc','osPecas','osExtraDesc','osExtraValor'].forEach(id => {
+    document.getElementById(id).addEventListener('input', osRecalcular);
+  });
+  document.getElementById('osValor').addEventListener('input', (e) => { e.target.dataset.editadoManualmente = '1'; });
+  osRecalcular();
+}
+
+async function voltarDoOS() {
+  if (osContexto.agendaId) { agModo = 'compromisso'; agAtualizarDinamico(); }
+  else if (osContexto.clienteId) { await irParaFichaCliente(osContexto.clienteId); }
+  else { agModo = 'calendario'; agAtualizarDinamico(); }
+}
+
+async function osSalvar(osId) {
+  const msg = document.getElementById('osMsg');
+  const dados = {
+    tipo: document.getElementById('osTipo').value,
+    porte: document.getElementById('osPorte').value,
+    dificuldade: document.getElementById('osDificuldade').value,
+    metros: parseFloat(document.getElementById('osMetros').value) || 0,
+    suporte: document.getElementById('osSuporte').checked,
+    eletrica220: document.getElementById('osEletrica220').checked,
+    pecasDesc: document.getElementById('osPecasDesc').value,
+    pecas: parseFloat(document.getElementById('osPecas').value) || 0,
+    extraDesc: document.getElementById('osExtraDesc').value,
+    extraValor: parseFloat(document.getElementById('osExtraValor').value) || 0
+  };
+  const tipoLabel = { instalacao: 'Instalação', manutencao: 'Manutenção', higienizacao: 'Higienização' }[dados.tipo];
+  const payload = {
+    empresa_id: empresaAtual.id,
+    cliente_id: osContexto.clienteId || null,
+    agenda_id: osContexto.agendaId || null,
+    orcamento_id: osContexto.orcamentoId || null,
+    descricao: tipoLabel + (osContexto.clienteNome ? ' — ' + osContexto.clienteNome : ''),
+    dados,
+    valor: parseFloat(document.getElementById('osValor').value) || 0,
+    observacoes: document.getElementById('osObs').value.trim(),
+    status: document.getElementById('osStatus') ? document.getElementById('osStatus').value : 'aberta'
+  };
+  let error;
+  if (osId) { ({ error } = await supabaseClient.from('ordens_servico').update(payload).eq('id', osId)); }
+  else { ({ error } = await supabaseClient.from('ordens_servico').insert(payload)); }
+  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar OS.'; return; }
+  msg.className = 'msg ok'; msg.textContent = 'Salvo!';
+  setTimeout(() => agAtualizarDinamico(), 600);
+}
+
+/* ===================== CALCULADORA DE ORÇAMENTO AVULSO ===================== */
+
+let avItems = [];
+let avNextId = 1;
+let avSalvarTimeout = null;
+let avClientesCache = [];
+let avOrcamentoSalvoId = null;
+
+function money(v) { return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
+
+function novoItemAvulso() {
+  return { id: avNextId++, tipo: 'instalacao', porte: '12000', dificuldade: 'medio', metros: 3, suporte: false, eletrica220: false, pecasDesc: '', pecas: 0, extraDesc: '', extraValor: 0 };
+}
+
+function renderAvulso() {
+  avItems = [novoItemAvulso()];
+  const c = empresaAtual.precos.config;
+  const emp = empresaAtual.precos.dadosEmpresa;
+
+  document.getElementById("conteudo").innerHTML = `
+    <div id="avEditor">
+      <div class="card">
+        <details>
+          <summary>Configurações de preço (valores médios, ajuste aqui)</summary>
+          <div class="price-grid">
+            <span>Mão de obra base — Instalação (R$)</span><input type="number" id="baseInstalacao" value="${c.baseInstalacao}">
+            <span>Mão de obra base — Manutenção (R$)</span><input type="number" id="baseManutencao" value="${c.baseManutencao}">
+            <span>Mão de obra base — Higienização (R$)</span><input type="number" id="baseHigienizacao" value="${c.baseHigienizacao}">
+            <span>Adicional — 9.000 (R$)</span><input type="number" id="add9000" value="${c.add9000}">
+            <span>Adicional — 12.000 (R$)</span><input type="number" id="add12000" value="${c.add12000}">
+            <span>Adicional — 18.000 (R$)</span><input type="number" id="add18000" value="${c.add18000}">
+            <span>Adicional — 24.000 (R$)</span><input type="number" id="add24000" value="${c.add24000}">
+            <span>Adicional — 30.000 (R$)</span><input type="number" id="add30000" value="${c.add30000}">
+            <span>Adicional — 36.000+ (R$)</span><input type="number" id="add36000" value="${c.add36000}">
+            <span>Multiplicador dificuldade — Médio</span><input type="number" id="multMedio" value="${c.multMedio}" step="0.01">
+            <span>Multiplicador dificuldade — Difícil</span><input type="number" id="multDificil" value="${c.multDificil}" step="0.01">
+            <span>Preço por metro de tubulação (R$)</span><input type="number" id="precoMetro" value="${c.precoMetro}">
+            <span>Suporte extra — fixo (R$)</span><input type="number" id="precoSuporte" value="${c.precoSuporte}">
+            <span>Elétrica 220V — fixo (R$)</span><input type="number" id="precoEletrica" value="${c.precoEletrica}">
+            <span>Materiais base — instalação (R$)</span><input type="number" id="materiaisInstalacao" value="${c.materiaisInstalacao}">
+            <span>Insumos — manutenção/higienização (R$)</span><input type="number" id="materiaisManutencao" value="${c.materiaisManutencao}">
+          </div>
+          <div class="note">Ajustes aqui são salvos automaticamente na sua conta.</div>
+          <div class="voltar-link" id="restaurarPadraoBtn" style="margin-top:8px;">Restaurar valores padrão de fábrica</div>
+        </details>
+      </div>
+
+      <div id="avItemsContainer"></div>
+      <button class="add-btn" id="avAddItemBtn">+ Adicionar item ao orçamento</button>
+
+      <div class="card">
+        <label style="margin-top:0;">Desconto para pagamento à vista (opcional)</label>
+        <div class="price-grid" style="grid-template-columns: 1fr 1fr;">
+          <select id="avDescontoTipo"><option value="percentual">Percentual (%)</option><option value="fixo">Valor fixo (R$)</option></select>
+          <input type="number" id="avDescontoValor" min="0" step="0.5" value="0" placeholder="0">
+        </div>
+      </div>
+
+      <div class="result">
+        <div class="label">Valor total do orçamento</div>
+        <div class="value" id="avTotalValue">R$ 0,00</div>
+        <div class="breakdown" id="avBreakdown"></div>
+        <div id="avDescontoResumo" class="hidden"></div>
+      </div>
+
+      <div class="note">Estimativa de referência. Confirme sempre com vistoria.</div>
+      <button class="btn btn-ambar" id="avGerarClienteBtn">Gerar orçamento para o cliente</button>
+    </div>
+
+    <div id="avClientView" class="hidden">
+      <div class="proposal">
+        <div class="proposal-header">
+          <div class="brand">${esc(empresaAtual.nome_empresa)}</div>
+          <div class="tagline">Orçamento de serviço</div>
+          <div class="proposal-numero" id="avProposalNumero"></div>
+        </div>
+        <div class="proposal-meta">
+          <label>Cliente cadastrado</label>
+          <select id="avClienteSelect"><option value="">— selecionar cliente —</option></select>
+          <label>Nome exibido no orçamento</label>
+          <input type="text" id="avClienteNome" placeholder="Ex: João Silva">
+          <label>Validade da proposta (dias)</label>
+          <input type="number" id="avValidadeDias" value="7" min="1">
+        </div>
+        <div class="proposal-items" id="avProposalItems"></div>
+        <div class="proposal-total"><span class="lbl">Total</span><span class="val" id="avProposalTotal">R$ 0,00</span></div>
+        <div class="proposal-total-desconto hidden" id="avProposalTotalDesconto"><span class="lbl">À vista (com desconto)</span><span class="val" id="avProposalTotalComDesconto">R$ 0,00</span></div>
+        <div class="proposal-condicoes" id="avProposalCondicoes"></div>
+        <div class="proposal-footer" id="avProposalFooter"></div>
+        <div class="proposal-marca">feito no Estelar Orçamentos</div>
+      </div>
+      <div class="action-row">
+        <button class="btn btn-secundario" id="avPrintBtn">Salvar / imprimir PDF</button>
+        <button class="btn btn-secundario" id="avWhatsappBtn">Texto p/ WhatsApp</button>
+      </div>
+      <button class="btn btn-secundario" id="avNovaAbaBtn">Abrir em nova aba (recomendado p/ imprimir)</button>
+      <textarea id="avWhatsappText" class="hidden" readonly></textarea>
+
+      <div class="card" style="margin-top:14px;">
+        <button class="btn" id="avSalvarOrcamentoBtn">Salvar orçamento no histórico do cliente</button>
+        <div class="msg" id="avSalvarMsg"></div>
+        <div id="avAgendarBox" class="hidden" style="margin-top:10px; padding-top:14px; border-top:1px solid var(--cinza-linha);">
+          <h3 style="font-size:15px;">Cliente aprovou? Agende o serviço</h3>
+          <label>Tipo</label>
+          <select id="avAgTipo">
+            <option value="instalacao">Instalação</option>
+            <option value="manutencao">Manutenção</option>
+            <option value="visita">Visita técnica</option>
+            <option value="outro">Outro</option>
+          </select>
+          <label>Data e hora</label>
+          <input type="datetime-local" id="avAgDataHora">
+          <button class="btn btn-ambar" id="avConfirmarAgendaBtn">Confirmar agendamento</button>
+          <div class="msg" id="avAgMsg"></div>
+          <div class="voltar-link" id="avCriarOSDiretoBtn" style="margin-top:10px;">ou criar Ordem de Serviço agora, sem agendar visita</div>
+        </div>
+      </div>
+
+      <div class="voltar-link" id="avVoltarBtn">← Voltar para edição</div>
+    </div>
+  `;
+
+  ligarEventosAvulso();
+  avRenderItems();
+}
+
+function construirConfigEstruturado(raw) {
+  return {
+    baseInstalacao: raw.baseInstalacao, baseManutencao: raw.baseManutencao, baseHigienizacao: raw.baseHigienizacao,
+    add: { '9000': raw.add9000, '12000': raw.add12000, '18000': raw.add18000, '24000': raw.add24000, '30000': raw.add30000, '36000': raw.add36000 },
+    multMedio: raw.multMedio || 1, multDificil: raw.multDificil || 1,
+    precoMetro: raw.precoMetro, precoSuporte: raw.precoSuporte, precoEletrica: raw.precoEletrica,
+    materiaisInstalacao: raw.materiaisInstalacao, materiaisManutencao: raw.materiaisManutencao
+  };
+}
+
+function avCfg() {
+  const ids = ['baseInstalacao','baseManutencao','baseHigienizacao','add9000','add12000','add18000','add24000','add30000','add36000','multMedio','multDificil','precoMetro','precoSuporte','precoEletrica','materiaisInstalacao','materiaisManutencao'];
+  const c = {};
+  ids.forEach(id => { c[id] = parseFloat(document.getElementById(id).value) || 0; });
+  const estruturado = construirConfigEstruturado(c);
+  estruturado._raw = c;
+  return estruturado;
+}
+
+function avCalcItem(it, c) {
+  const baseServico = it.tipo === 'instalacao' ? c.baseInstalacao : (it.tipo === 'manutencao' ? c.baseManutencao : c.baseHigienizacao);
+  const adicionalPorte = c.add[it.porte] || 0;
+  const multDif = it.dificuldade === 'medio' ? c.multMedio : (it.dificuldade === 'dificil' ? c.multDificil : 1);
+  const maoDeObra = (baseServico + adicionalPorte) * multDif;
+  let materiais = 0, tubulacaoCusto = 0, suporteCusto = 0, eletricaCusto = 0;
+  if (it.tipo === 'instalacao') {
+    tubulacaoCusto = (it.metros || 0) * c.precoMetro;
+    suporteCusto = it.suporte ? c.precoSuporte : 0;
+    eletricaCusto = it.eletrica220 ? c.precoEletrica : 0;
+    materiais = c.materiaisInstalacao + tubulacaoCusto + suporteCusto + eletricaCusto;
+  } else { materiais = c.materiaisManutencao; }
+  const pecasValor = it.tipo === 'manutencao' ? (parseFloat(it.pecas) || 0) : 0;
+  const extraValor = parseFloat(it.extraValor) || 0;
+  return { maoDeObra, materiais, pecas: pecasValor, extra: extraValor, total: maoDeObra + materiais + pecasValor + extraValor };
+}
+
+function avTipoLabel(t) { return t === 'instalacao' ? 'Instalação' : (t === 'manutencao' ? 'Manutenção' : 'Higienização'); }
+
+function avRenderItems() {
+  const container = document.getElementById('avItemsContainer');
+  container.innerHTML = '';
+  avItems.forEach((it, idx) => {
+    const div = document.createElement('div');
+    div.className = 'item-card';
+    div.innerHTML =
+      `<div class="item-header"><span>Item ${idx + 1} — ${avTipoLabel(it.tipo)}</span><button class="remove-btn" data-remove="${it.id}">✕</button></div>` +
+      `<label>Tipo de serviço</label><select data-field="tipo" data-id="${it.id}">
+        <option value="instalacao" ${it.tipo === 'instalacao' ? 'selected' : ''}>Instalação</option>
+        <option value="manutencao" ${it.tipo === 'manutencao' ? 'selected' : ''}>Manutenção</option>
+        <option value="higienizacao" ${it.tipo === 'higienizacao' ? 'selected' : ''}>Higienização</option>
+      </select>` +
+      `<label>Porte do aparelho (BTUs)</label><select data-field="porte" data-id="${it.id}">` +
+        ['9000','12000','18000','24000','30000','36000'].map(v => {
+          const lbl = v === '36000' ? '36.000+' : (parseInt(v)/1000) + '.000';
+          return `<option value="${v}" ${it.porte === v ? 'selected' : ''}>${lbl}</option>`;
+        }).join('') +
+      `</select>` +
+      `<label>Dificuldade de acesso</label><select data-field="dificuldade" data-id="${it.id}">
+        <option value="facil" ${it.dificuldade === 'facil' ? 'selected' : ''}>Fácil — térreo / fácil acesso</option>
+        <option value="medio" ${it.dificuldade === 'medio' ? 'selected' : ''}>Médio</option>
+        <option value="dificil" ${it.dificuldade === 'dificil' ? 'selected' : ''}>Difícil — altura / acesso complicado</option>
+      </select>` +
+      (it.tipo === 'instalacao' ?
+        `<label>Distância entre unidades — metros de infra</label>
+        <input type="number" min="0" step="0.5" data-field="metros" data-id="${it.id}" value="${it.metros}">
+        <div class="checkbox-row"><input type="checkbox" data-field="suporte" data-id="${it.id}" ${it.suporte ? 'checked' : ''}><label>Precisa de suporte / estrutura extra</label></div>
+        <div class="checkbox-row"><input type="checkbox" data-field="eletrica220" data-id="${it.id}" ${it.eletrica220 ? 'checked' : ''}><label>Instalação elétrica 220V</label></div>` : '') +
+      (it.tipo === 'manutencao' ?
+        `<label>Peça(s) a substituir — descrição (opcional)</label>
+        <input type="text" placeholder="ex: capacitor, placa" data-field="pecasDesc" data-id="${it.id}" value="${it.pecasDesc || ''}">
+        <label>Valor da(s) peça(s) (R$)</label>
+        <input type="number" min="0" step="1" data-field="pecas" data-id="${it.id}" value="${it.pecas || 0}">` : '') +
+      `<label>Custo extra personalizado (opcional)</label>
+      <input type="text" placeholder="ex: suporte sob medida" data-field="extraDesc" data-id="${it.id}" value="${it.extraDesc || ''}">
+      <input type="number" min="0" step="1" placeholder="Valor do custo extra (R$)" data-field="extraValor" data-id="${it.id}" value="${it.extraValor || 0}" style="margin-top:6px;">
+      <div class="item-subtotal"><span>Subtotal do item</span><b class="subtotal-value"></b></div>`;
+    container.appendChild(div);
+  });
+  avCalcular();
+}
+
+function avCalcularDesconto(total) {
+  const tipo = document.getElementById('avDescontoTipo').value;
+  const valorCampo = parseFloat(document.getElementById('avDescontoValor').value) || 0;
+  let valorDesconto = 0, percentual = 0;
+  if (tipo === 'percentual') { percentual = valorCampo; valorDesconto = total * (valorCampo / 100); }
+  else { valorDesconto = valorCampo; percentual = total > 0 ? (valorCampo / total) * 100 : 0; }
+  if (valorDesconto > total) valorDesconto = total;
+  return { tipo, percentual: Math.round(percentual * 100) / 100, valor: valorDesconto, totalComDesconto: total - valorDesconto };
+}
+
+function avCalcular() {
+  const c = avCfg();
+  let grandTotal = 0, maoDeObraTotal = 0, materiaisTotal = 0, pecasTotal = 0, extraTotal = 0;
+  const cards = document.querySelectorAll('#avItemsContainer .item-card');
+  avItems.forEach((it, idx) => {
+    const r = avCalcItem(it, c);
+    grandTotal += r.total; maoDeObraTotal += r.maoDeObra; materiaisTotal += r.materiais; pecasTotal += r.pecas; extraTotal += r.extra;
+    const card = cards[idx];
+    if (card) card.querySelector('.subtotal-value').textContent = money(r.total);
+  });
+  const desconto = avCalcularDesconto(grandTotal);
+  document.getElementById('avTotalValue').textContent = money(grandTotal);
+  let bd = `<div><span>Mão de obra</span><span>${money(maoDeObraTotal)}</span></div><div><span>Materiais</span><span>${money(materiaisTotal)}</span></div>`;
+  if (pecasTotal > 0) bd += `<div><span>Peças</span><span>${money(pecasTotal)}</span></div>`;
+  if (extraTotal > 0) bd += `<div><span>Extras</span><span>${money(extraTotal)}</span></div>`;
+  bd += `<div><span>Itens</span><span>${avItems.length}</span></div>`;
+  document.getElementById('avBreakdown').innerHTML = bd;
+  const descontoBox = document.getElementById('avDescontoResumo');
+  if (desconto.valor > 0) {
+    descontoBox.innerHTML = `<div class="label" style="margin-top:10px;">Valor à vista (com desconto)</div><div class="value" style="font-size:26px;">${money(desconto.totalComDesconto)}</div><div style="font-size:12px;color:#dbeafe;">Desconto de ${money(desconto.valor)} (${desconto.percentual}%)</div>`;
+    descontoBox.classList.remove('hidden');
+  } else { descontoBox.innerHTML = ''; descontoBox.classList.add('hidden'); }
+}
+
+function avItemDescricaoCliente(it) {
+  const porteLabel = (parseInt(it.porte) / 1000) + '.000 BTUs';
+  const extraSufixo = it.extraDesc && parseFloat(it.extraValor) > 0 ? ' + ' + it.extraDesc : '';
+  if (it.tipo === 'instalacao') {
+    let det = `Aparelho ${porteLabel} — tubulação de ${it.metros || 0}m`;
+    if (it.suporte) det += ' + suporte extra';
+    if (it.eletrica220) det += ' + instalação elétrica 220V';
+    return { titulo: 'Instalação de ar-condicionado', detalhe: det + extraSufixo };
+  }
+  if (it.tipo === 'manutencao') {
+    let det2 = `Aparelho ${porteLabel}`;
+    if (it.pecasDesc) det2 += ' — peça: ' + it.pecasDesc;
+    return { titulo: 'Manutenção', detalhe: det2 + extraSufixo };
+  }
+  return { titulo: 'Higienização', detalhe: `Aparelho ${porteLabel}` + extraSufixo };
+}
+
+let avOrcamentoNumero = null;
+function avGerarNumero() {
+  if (avOrcamentoNumero) return avOrcamentoNumero;
+  const seq = Math.floor(Math.random() * 900) + 100;
+  const d = new Date();
+  const yyyy = d.getFullYear(), mm = String(d.getMonth()+1).padStart(2,'0'), dd = String(d.getDate()).padStart(2,'0');
+  avOrcamentoNumero = `Orçamento nº ${yyyy}${mm}${dd}-${String(seq).padStart(3,'0')}`;
+  return avOrcamentoNumero;
+}
+
+function avEmpresaRodapeHtml() {
+  const emp = empresaAtual.precos.dadosEmpresa || {};
+  const cnpj = esc(emp.cnpj || ''), endereco = esc(emp.endereco || ''), telefone = esc(emp.telefone || ''), email = esc(emp.email || '');
+  const linha1 = esc(empresaAtual.nome_empresa) + (cnpj ? ' · CNPJ ' + cnpj : '');
+  const linha2 = [endereco, telefone, email].filter(Boolean).join(' · ');
+  return linha1 + (linha2 ? '<br>' + linha2 : '');
+}
+
+function avGerarDados() {
+  const c = avCfg();
+  let grandTotal = 0, itemsHtml = '';
+  const whatsLines = [];
+  avItems.forEach(it => {
+    const r = avCalcItem(it, c);
+    grandTotal += r.total;
+    const d = avItemDescricaoCliente(it);
+    itemsHtml += `<div class="proposal-item"><div class="titulo">${esc(d.titulo)}</div><div class="detalhe">${esc(d.detalhe)}</div><div class="preco">${money(r.total)}</div></div>`;
+    whatsLines.push(`• ${d.titulo} (${d.detalhe}): ${money(r.total)}`);
+  });
+  const desconto = avCalcularDesconto(grandTotal);
+  const validade = parseInt(document.getElementById('avValidadeDias').value) || 7;
+  const nome = document.getElementById('avClienteNome').value.trim();
+  const footerText = `Esta proposta comercial é válida por ${validade} dias. Valores sujeitos a confirmação técnica durante a vistoria no local.`;
+  const condicoesHtml = `<b>Condições comerciais</b>Pagamento combinado na confirmação do serviço. Garantia de 90 dias sobre a mão de obra executada.` + (desconto.valor > 0 ? ' O valor à vista já reflete a política de desconto vigente.' : '');
+  const whatsText = `Orçamento ${empresaAtual.nome_empresa}` + (nome ? ' — ' + nome : '') + '\n\n' + whatsLines.join('\n') + '\n\nTotal: ' + money(grandTotal) + (desconto.valor > 0 ? '\nÀ vista (com desconto): ' + money(desconto.totalComDesconto) : '') + '\nVálido por ' + validade + ' dias.';
+  return { itemsHtml: itemsHtml || '<div class="proposal-item"><div class="detalhe">Nenhum item adicionado ainda.</div></div>', total: grandTotal, totalFormatado: money(grandTotal), temDesconto: desconto.valor > 0, totalComDescontoFormatado: money(desconto.totalComDesconto), numero: avGerarNumero(), condicoesHtml, empresaHtml: avEmpresaRodapeHtml(), footerText, whatsText, nome };
+}
+
+function avMontarProposta() {
+  const d = avGerarDados();
+  document.getElementById('avProposalNumero').textContent = d.numero;
+  document.getElementById('avProposalItems').innerHTML = d.itemsHtml;
+  document.getElementById('avProposalTotal').textContent = d.totalFormatado;
+  document.getElementById('avProposalCondicoes').innerHTML = d.condicoesHtml;
+  document.getElementById('avProposalFooter').textContent = d.footerText;
+  const descontoEl = document.getElementById('avProposalTotalDesconto');
+  if (d.temDesconto) { document.getElementById('avProposalTotalComDesconto').textContent = d.totalComDescontoFormatado; descontoEl.classList.remove('hidden'); }
+  else { descontoEl.classList.add('hidden'); }
+}
+
+function avBuildStandaloneHTML(d) {
+  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Orçamento${d.nome ? ' — ' + esc(d.nome) : ''}</title><style>
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f1f5f9;padding:20px;color:#0f172a;}
+  .wrap{max-width:480px;margin:0 auto;}
+  .proposal{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);}
+  .proposal-header{background:linear-gradient(135deg,#2563eb,#1d4ed8);padding:22px 20px;color:#fff;}
+  .brand{font-size:20px;font-weight:800;}
+  .tagline{font-size:12px;color:#dbeafe;margin-top:2px;}
+  .proposal-numero{font-size:11px;color:#bfdbfe;margin-top:6px;}
+  .proposal-items{padding:6px 20px 4px;}
+  .proposal-item{padding:12px 0;border-bottom:1px solid #e2e8f0;}
+  .proposal-item .titulo{font-weight:700;font-size:14px;}
+  .proposal-item .detalhe{font-size:12px;color:#64748b;margin-top:2px;}
+  .proposal-item .preco{font-weight:700;color:#2563eb;font-size:14px;margin-top:6px;text-align:right;}
+  .proposal-total{margin:10px 20px 0;padding:16px;border-radius:10px;background:#0f172a;color:#fff;display:flex;justify-content:space-between;align-items:center;}
+  .proposal-total .lbl{font-size:12px;color:#cbd5e1;text-transform:uppercase;}
+  .proposal-total .val{font-size:22px;font-weight:800;color:#f59e0b;}
+  .proposal-total-desconto{margin:8px 20px 0;padding:16px;border-radius:10px;background:#166534;color:#fff;display:flex;justify-content:space-between;align-items:center;}
+  .proposal-total-desconto .val{font-size:22px;font-weight:800;color:#fff;}
+  .proposal-condicoes{margin:16px 20px 0;padding:14px 16px;border-radius:10px;background:#f8fafc;border:1px solid #e2e8f0;font-size:11.5px;color:#475569;line-height:1.6;}
+  .proposal-condicoes b{display:block;color:#0f172a;font-size:12.5px;margin-bottom:4px;}
+  .proposal-footer{padding:16px 20px 4px;font-size:11px;color:#64748b;line-height:1.5;}
+  .proposal-marca{padding:10px 20px 18px;font-size:10px;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;margin-top:4px;}
+  .print-btn{width:100%;padding:13px;margin-top:16px;border-radius:10px;border:none;background:#2563eb;color:#fff;font-size:14px;font-weight:700;cursor:pointer;}
+  @media print{.no-print{display:none !important;}body{background:#fff;padding:0;}}
+  </style></head><body><div class="wrap"><div class="proposal">
+  <div class="proposal-header"><div class="brand">${esc(empresaAtual.nome_empresa)}</div><div class="tagline">Orçamento de serviço</div><div class="proposal-numero">${esc(d.numero)}</div></div>
+  <div class="proposal-items">${d.itemsHtml}</div>
+  <div class="proposal-total"><span class="lbl">Total</span><span class="val">${d.totalFormatado}</span></div>
+  ${d.temDesconto ? `<div class="proposal-total-desconto"><span class="lbl">À vista</span><span class="val">${d.totalComDescontoFormatado}</span></div>` : ''}
+  <div class="proposal-condicoes">${d.condicoesHtml}</div>
+  <div class="proposal-footer">${d.footerText}<br>${d.empresaHtml}</div>
+  <div class="proposal-marca">feito no Estelar Orçamentos</div>
+  </div><button class="print-btn no-print" onclick="window.print()">Salvar / imprimir PDF</button></div></body></html>`;
+}
+
+async function avSalvarOrcamento() {
+  const clienteId = document.getElementById('avClienteSelect').value;
+  const msg = document.getElementById('avSalvarMsg');
+  if (!clienteId) {
+    msg.className = 'msg erro';
+    msg.textContent = 'Selecione um cliente cadastrado (aba Clientes) pra salvar o orçamento.';
+    return;
+  }
+  const d = avGerarDados();
+  const { data, error } = await supabaseClient.from('orcamentos').insert({
+    empresa_id: empresaAtual.id,
+    cliente_id: clienteId,
+    tipo: 'avulso',
+    nome_cliente: document.getElementById('avClienteNome').value.trim(),
+    dados: { items: avItems, numero: d.numero, validadeDias: document.getElementById('avValidadeDias').value },
+    valor_total: d.total
+  }).select().single();
+  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar orçamento.'; return; }
+  avOrcamentoSalvoId = data.id;
+  msg.className = 'msg ok';
+  msg.textContent = 'Orçamento salvo no histórico do cliente!';
+  document.getElementById('avAgendarBox').classList.remove('hidden');
+}
+
+async function avConfirmarAgenda() {
+  const msg = document.getElementById('avAgMsg');
+  const clienteId = document.getElementById('avClienteSelect').value;
+  const dataHora = document.getElementById('avAgDataHora').value;
+  if (!avOrcamentoSalvoId || !clienteId) { msg.className = 'msg erro'; msg.textContent = 'Salve o orçamento primeiro.'; return; }
+  if (!dataHora) { msg.className = 'msg erro'; msg.textContent = 'Escolha a data e hora do serviço.'; return; }
+  const nomeCliente = document.getElementById('avClienteNome').value.trim();
+  const { error } = await supabaseClient.from('agenda').insert({
+    empresa_id: empresaAtual.id,
+    cliente_id: clienteId,
+    orcamento_id: avOrcamentoSalvoId,
+    titulo: (nomeCliente ? nomeCliente + ' — ' : '') + avOrcamentoNumero,
+    tipo: document.getElementById('avAgTipo').value,
+    data_hora: new Date(dataHora).toISOString(),
+    observacoes: ''
+  });
+  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao agendar.'; return; }
+  msg.className = 'msg ok';
+  msg.textContent = 'Agendado! Você pode ver na aba Agenda.';
+}
+
+function avSalvarConfigDebounced() {
+  clearTimeout(avSalvarTimeout);
+  avSalvarTimeout = setTimeout(avSalvarConfig, 800);
+}
+
+async function avSalvarConfig() {
+  const c = avCfg()._raw;
+  const dadosEmpresa = empresaAtual.precos.dadosEmpresa || {};
+  empresaAtual.precos = { config: c, dadosEmpresa };
+  await supabaseClient.from('empresas').update({ precos: empresaAtual.precos }).eq('id', empresaAtual.id);
+}
+
+function ligarEventosAvulso() {
+  document.getElementById('avAddItemBtn').addEventListener('click', () => { avItems.push(novoItemAvulso()); avRenderItems(); });
+
+  document.getElementById('avItemsContainer').addEventListener('input', (e) => {
+    const id = parseInt(e.target.getAttribute('data-id'));
+    const field = e.target.getAttribute('data-field');
+    if (!id || !field) return;
+    const it = avItems.find(i => i.id === id);
+    if (!it) return;
+    if (field === 'suporte' || field === 'eletrica220') it[field] = e.target.checked;
+    else if (field === 'metros' || field === 'pecas' || field === 'extraValor') it[field] = parseFloat(e.target.value) || 0;
+    else it[field] = e.target.value;
+    if (field === 'tipo') avRenderItems(); else avCalcular();
+  });
+
+  document.getElementById('avItemsContainer').addEventListener('click', (e) => {
+    const id = e.target.getAttribute('data-remove');
+    if (id) { avItems = avItems.filter(i => i.id !== parseInt(id)); avRenderItems(); }
+  });
+
+  document.querySelectorAll('#avEditor .price-grid input').forEach(el => {
+    el.addEventListener('input', () => { avCalcular(); avSalvarConfigDebounced(); });
+  });
+  document.getElementById('restaurarPadraoBtn').addEventListener('click', () => {
+    Object.keys(VALORES_PADRAO).forEach(id => { document.getElementById(id).value = VALORES_PADRAO[id]; });
+    avCalcular(); avSalvarConfig();
+  });
+
+  document.getElementById('avDescontoTipo').addEventListener('input', avCalcular);
+  document.getElementById('avDescontoValor').addEventListener('input', avCalcular);
+
+  document.getElementById('avGerarClienteBtn').addEventListener('click', async () => {
+    avOrcamentoSalvoId = null;
+    avOrcamentoNumero = null;
+    const { data: clientes } = await supabaseClient.from('clientes').select('id,nome').eq('empresa_id', empresaAtual.id).order('nome');
+    avClientesCache = clientes || [];
+    const select = document.getElementById('avClienteSelect');
+    select.innerHTML = '<option value="">— selecionar cliente —</option>' + avClientesCache.map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('');
+    document.getElementById('avSalvarMsg').textContent = '';
+    document.getElementById('avAgendarBox').classList.add('hidden');
+    document.getElementById('avAgMsg').textContent = '';
+    avMontarProposta();
+    document.getElementById('avEditor').classList.add('hidden');
+    document.getElementById('avClientView').classList.remove('hidden');
+  });
+  document.getElementById('avClienteSelect').addEventListener('change', (e) => {
+    const c = avClientesCache.find(c => c.id === e.target.value);
+    if (c) document.getElementById('avClienteNome').value = c.nome;
+    avMontarProposta();
+  });
+  document.getElementById('avSalvarOrcamentoBtn').addEventListener('click', avSalvarOrcamento);
+  document.getElementById('avConfirmarAgendaBtn').addEventListener('click', avConfirmarAgenda);
+  document.getElementById('avCriarOSDiretoBtn').addEventListener('click', () => {
+    if (!avOrcamentoSalvoId) return;
+    osAbrirComContexto({ agendaId: null, orcamentoId: avOrcamentoSalvoId });
+  });
+  document.getElementById('avVoltarBtn').addEventListener('click', () => {
+    document.getElementById('avClientView').classList.add('hidden');
+    document.getElementById('avEditor').classList.remove('hidden');
+  });
+  document.getElementById('avClienteNome').addEventListener('input', avMontarProposta);
+  document.getElementById('avValidadeDias').addEventListener('input', avMontarProposta);
+  document.getElementById('avPrintBtn').addEventListener('click', () => window.print());
+  document.getElementById('avNovaAbaBtn').addEventListener('click', () => {
+    const d = avGerarDados();
+    const html = avBuildStandaloneHTML(d);
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) alert('O navegador bloqueou a nova aba. Permita pop-ups para este site e tente novamente.');
+  });
+  document.getElementById('avWhatsappBtn').addEventListener('click', () => {
+    const ta = document.getElementById('avWhatsappText');
+    ta.classList.remove('hidden');
+    ta.select();
+    try { navigator.clipboard.writeText(ta.value); } catch (e) { try { document.execCommand('copy'); } catch (e2) {} }
+  });
+}
+
+iniciar();
+</script>
+</body>
+</html>
