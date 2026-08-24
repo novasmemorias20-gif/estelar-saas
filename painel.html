@@ -202,6 +202,30 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
 .cal-tem { font-weight: 700; color: var(--azul-escuro); background: var(--azul-tinta); }
 .cal-hoje { outline: 1.5px solid var(--azul); outline-offset: -1.5px; }
 .cal-dot { display: block; width: 5px; height: 5px; border-radius: 50%; background: var(--ambar); margin: 3px auto 0; }
+
+/* Início */
+.card-titulo { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.card-titulo h3 { margin: 0; }
+.card-icon-chip { width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.card-icon-chip svg { width: 17px; height: 17px; }
+.chip-azul { background: var(--azul-tinta); color: var(--azul-escuro); }
+.chip-ambar { background: #fef3c7; color: var(--ambar-escuro); }
+.chip-verde { background: var(--sucesso-bg); color: var(--sucesso); }
+.saudacao { font-family: "Manrope", sans-serif; font-weight: 800; font-size: 20px; color: var(--escuro); margin-bottom: 2px; }
+.saudacao-sub { font-size: 12.5px; color: var(--cinza-texto); margin-bottom: 16px; text-transform: capitalize; }
+.atalhos-row { display: flex; gap: 10px; margin-bottom: 16px; }
+.atalho-btn {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 8px;
+  border-radius: 16px; border: none; cursor: pointer; text-align: center; font-family: inherit;
+}
+.atalho-btn svg { width: 20px; height: 20px; }
+.atalho-btn span { font-size: 12.5px; font-weight: 700; }
+.atalho-primario { background: var(--gradiente); color: #fff; box-shadow: 0 6px 18px rgba(37,99,235,.28); }
+.atalho-secundario { background: #fff; color: var(--azul); border: 1.5px solid var(--cinza-linha) !important; }
+.kanban-secao { margin-bottom: 16px; }
+.kanban-secao:last-child { margin-bottom: 0; }
+.kanban-cabecalho { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.kanban-cabecalho .contagem { font-size: 12px; color: var(--cinza-texto); font-weight: 700; }
 </style>
 </head>
 <body>
@@ -362,21 +386,61 @@ async function salvarDadosEmpresa() {
 
 const FINANCEIRO_OCULTO_KEY = 'estelar_financeiro_oculto';
 
+function osKanbanColuna(itens) {
+  if (!itens.length) return '<p class="vazio" style="padding:10px 0;">Nada por aqui.</p>';
+  return itens.map(o => `
+    <div class="lista-item" style="cursor:pointer;" data-kb-os="${o.id}">
+      <div class="info">
+        <div class="titulo-item">${esc(o.clientes ? o.clientes.nome : (o.descricao || 'Ordem de serviço'))}</div>
+        <div class="sub-item">${esc(o.descricao || '')} · ${money(o.valor || 0)}</div>
+        ${o.pago ? '<span class="status-tag status-concluido">Pago</span>' : (o.status === 'concluida' ? '<span class="status-tag status-cancelado">A receber</span>' : '')}
+      </div>
+    </div>`).join('');
+}
+
+function osKanbanSecaoHtml(titulo, cor, itens) {
+  return `<div class="kanban-secao">
+    <div class="kanban-cabecalho"><span class="status-tag status-${cor}">${titulo}</span><span class="contagem">${itens.length}</span></div>
+    ${osKanbanColuna(itens)}
+  </div>`;
+}
+
+function ligarCliquesKanban(container) {
+  container.querySelectorAll('[data-kb-os]').forEach(el => {
+    el.addEventListener('click', () => osAbrirComContexto({ osId: el.getAttribute('data-kb-os') }));
+  });
+}
+
+function saudacaoAtual() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Bom dia';
+  if (h < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
+
+const ICONE_OS = '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/>';
+const ICONE_CLIENTE_MAIS = '<path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="17" y1="11" x2="23" y2="11"/>';
+const ICONE_MOEDA = '<circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5a2.5 2.5 0 0 1 2.5-1.5h.5a2 2 0 0 1 0 4h-1a2 2 0 0 0 0 4h.5a2.5 2.5 0 0 0 2.5-1.5"/>';
+const ICONE_CALENDARIO_CHECK = '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M9 16l2 2 4-4"/>';
+
 async function renderInicio() {
   const conteudo = document.getElementById("conteudo");
   conteudo.innerHTML = '<div class="card"><p class="vazio">Carregando...</p></div>';
 
   const [{ data: osData }, { data: clientesData }, { data: agendaConcluida }] = await Promise.all([
-    supabaseClient.from('ordens_servico').select('status,valor,pago,data_pagamento').eq('empresa_id', empresaAtual.id),
+    supabaseClient.from('ordens_servico').select('id,status,valor,pago,data_pagamento,descricao,clientes(nome)').eq('empresa_id', empresaAtual.id).order('created_at', { ascending: false }),
     supabaseClient.from('clientes').select('id,nome,intervalo_retorno_dias').eq('empresa_id', empresaAtual.id),
     supabaseClient.from('agenda').select('cliente_id,data_hora').eq('empresa_id', empresaAtual.id).eq('status', 'concluido').order('data_hora', { ascending: false })
   ]);
 
   const os = osData || [];
-  const osAbertas = os.filter(o => o.status === 'aberta').length;
-  const osAndamento = os.filter(o => o.status === 'em_andamento').length;
+  const osPorStatus = {
+    aberta: os.filter(o => o.status === 'aberta'),
+    em_andamento: os.filter(o => o.status === 'em_andamento'),
+    concluida: os.filter(o => o.status === 'concluida')
+  };
   const emExecucao = os.filter(o => o.status !== 'concluida').reduce((s, o) => s + (parseFloat(o.valor) || 0), 0);
-  const aReceber = os.filter(o => o.status === 'concluida' && !o.pago).reduce((s, o) => s + (parseFloat(o.valor) || 0), 0);
+  const aReceber = osPorStatus.concluida.filter(o => !o.pago).reduce((s, o) => s + (parseFloat(o.valor) || 0), 0);
 
   const hoje = new Date();
   const recebidoMes = os.filter(o => {
@@ -424,27 +488,41 @@ async function renderInicio() {
     `;
 
   conteudo.innerHTML = `
+    <div class="saudacao">${saudacaoAtual()}, ${esc(empresaAtual.nome_empresa)}</div>
+    <div class="saudacao-sub">${hoje.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}</div>
+
+    <div class="atalhos-row">
+      <button class="atalho-btn atalho-primario" id="btnAtalhoNovaOS">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONE_OS}</svg>
+        <span>Nova OS</span>
+      </button>
+      <button class="atalho-btn atalho-secundario" id="btnAtalhoNovoCliente">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONE_CLIENTE_MAIS}</svg>
+        <span>Novo cliente</span>
+      </button>
+    </div>
+
     <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <h3 style="margin:0;">Financeiro</h3>
+      <div class="card-titulo"><div class="card-icon-chip chip-azul"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONE_OS}</svg></div><h3>Ordens de serviço</h3></div>
+      ${osKanbanSecaoHtml('Aberta', 'agendado', osPorStatus.aberta)}
+      ${osKanbanSecaoHtml('Em andamento', 'agendado', osPorStatus.em_andamento)}
+      ${osKanbanSecaoHtml('Concluída', 'concluido', osPorStatus.concluida)}
+    </div>
+
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <div class="card-titulo" style="margin-bottom:0;"><div class="card-icon-chip chip-verde"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONE_MOEDA}</svg></div><h3>Financeiro</h3></div>
         <button class="icon-btn" id="btnOcultarFinanceiro" title="Ocultar/mostrar valores">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${oculto
             ? '<path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.6 18.6 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'
             : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'}</svg>
         </button>
       </div>
-      <div id="financeiroConteudo" style="margin-top:6px;">${financeiroConteudo}</div>
+      <div id="financeiroConteudo">${financeiroConteudo}</div>
     </div>
 
     <div class="card">
-      <h3>Ordens de serviço</h3>
-      <div class="lista-item"><div class="info"><div class="titulo-item">Abertas</div></div><span style="font-weight:800; font-family:'Manrope',sans-serif;">${osAbertas}</span></div>
-      <div class="lista-item"><div class="info"><div class="titulo-item">Em andamento</div></div><span style="font-weight:800; font-family:'Manrope',sans-serif;">${osAndamento}</span></div>
-      <div class="voltar-link" id="btnVerKanbanInicio">Ver quadro completo por status →</div>
-    </div>
-
-    <div class="card">
-      <h3>Clientes — visitas vencidas ou próximas</h3>
+      <div class="card-titulo"><div class="card-icon-chip chip-ambar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONE_CALENDARIO_CHECK}</svg></div><h3>Clientes — visitas vencidas ou próximas</h3></div>
       ${visitasHtml}
     </div>
   `;
@@ -457,7 +535,45 @@ async function renderInicio() {
   conteudo.querySelectorAll('[data-ir-cliente]').forEach(el => {
     el.addEventListener('click', () => irParaFichaCliente(el.getAttribute('data-ir-cliente')));
   });
-  document.getElementById('btnVerKanbanInicio').addEventListener('click', irParaKanbanOS);
+  ligarCliquesKanban(conteudo);
+  document.getElementById('btnAtalhoNovaOS').addEventListener('click', irParaNovaOS);
+  document.getElementById('btnAtalhoNovoCliente').addEventListener('click', irParaNovoClienteAtalho);
+}
+
+async function irParaNovoClienteAtalho() {
+  ativarTab('clientes');
+  await renderClientes();
+  const campo = document.getElementById('clNome');
+  if (campo) campo.focus();
+}
+
+async function irParaNovaOS() {
+  ativarTab('agenda');
+  await renderAgenda();
+  agModo = 'novaOS';
+  await agAtualizarDinamico();
+}
+
+async function agRenderNovaOS(card) {
+  const { data: clientes } = await supabaseClient.from('clientes').select('id,nome').eq('empresa_id', empresaAtual.id).order('nome');
+  const opcoes = (clientes || []).map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('');
+  card.innerHTML = `
+    <div class="voltar-link" id="novaOsVoltarBtn" style="margin-top:0;margin-bottom:10px;text-align:left;">← Voltar ao calendário</div>
+    <h3 style="font-size:15px;">Nova ordem de serviço</h3>
+    <p class="note" style="margin-top:-4px;">Escolha o cliente pra começar. Você preenche os detalhes do serviço na próxima tela.</p>
+    <label>Cliente</label>
+    <select id="novaOsCliente"><option value="">— selecionar cliente —</option>${opcoes}</select>
+    <div class="msg erro" id="novaOsMsg"></div>
+    <button class="btn" id="novaOsContinuarBtn">Continuar</button>
+  `;
+  document.getElementById('novaOsVoltarBtn').addEventListener('click', () => { agModo = 'calendario'; agAtualizarDinamico(); });
+  document.getElementById('novaOsContinuarBtn').addEventListener('click', () => {
+    const cid = document.getElementById('novaOsCliente').value;
+    if (!cid) { document.getElementById('novaOsMsg').textContent = 'Selecione um cliente pra continuar.'; return; }
+    osContexto = { agendaId: null, orcamentoId: null, clienteId: cid };
+    agModo = 'os';
+    agAtualizarDinamico();
+  });
 }
 
 /* ===================== INÍCIO (DASHBOARD) FIM ===================== */
@@ -826,6 +942,7 @@ async function agAtualizarDinamico() {
   else if (agModo === 'compromisso') await agRenderCompromisso(card);
   else if (agModo === 'os') await agRenderOS(card);
   else if (agModo === 'kanban') await agRenderKanban(card);
+  else if (agModo === 'novaOS') await agRenderNovaOS(card);
 }
 
 async function irParaKanbanOS() {
@@ -844,33 +961,10 @@ async function agRenderKanban(card) {
 
   if (error) { card.innerHTML = '<div class="voltar-link" id="kbVoltarBtn" style="margin-top:0; text-align:left;">← Voltar ao calendário</div><p class="msg erro">Erro ao carregar ordens de serviço.</p>'; document.getElementById('kbVoltarBtn').addEventListener('click', () => { agModo = 'calendario'; agAtualizarDinamico(); }); return; }
 
-  const colunas = [
-    { status: 'aberta', titulo: 'Aberta', cor: 'agendado' },
-    { status: 'em_andamento', titulo: 'Em andamento', cor: 'agendado' },
-    { status: 'concluida', titulo: 'Concluída', cor: 'concluido' }
-  ];
-
-  const html = colunas.map(col => {
-    const itens = (data || []).filter(o => o.status === col.status);
-    const listaHtml = itens.length
-      ? itens.map(o => `
-          <div class="lista-item" style="cursor:pointer;" data-kb-os="${o.id}">
-            <div class="info">
-              <div class="titulo-item">${esc(o.clientes ? o.clientes.nome : (o.descricao || 'Ordem de serviço'))}</div>
-              <div class="sub-item">${esc(o.descricao || '')} · ${money(o.valor || 0)}</div>
-              ${o.pago ? '<span class="status-tag status-concluido">Pago</span>' : (col.status === 'concluida' ? '<span class="status-tag status-cancelado">A receber</span>' : '')}
-            </div>
-          </div>`).join('')
-      : '<p class="vazio" style="padding:14px 0;">Nada por aqui.</p>';
-    return `
-      <div style="margin-bottom:18px;">
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-          <span class="status-tag status-${col.cor}">${col.titulo}</span>
-          <span style="font-size:12px; color:var(--cinza-texto); font-weight:600;">${itens.length}</span>
-        </div>
-        ${listaHtml}
-      </div>`;
-  }).join('');
+  const os = data || [];
+  const html = osKanbanSecaoHtml('Aberta', 'agendado', os.filter(o => o.status === 'aberta'))
+    + osKanbanSecaoHtml('Em andamento', 'agendado', os.filter(o => o.status === 'em_andamento'))
+    + osKanbanSecaoHtml('Concluída', 'concluido', os.filter(o => o.status === 'concluida'));
 
   card.innerHTML = `
     <div class="voltar-link" id="kbVoltarBtn" style="margin-top:0; margin-bottom:12px; text-align:left;">← Voltar ao calendário</div>
@@ -878,9 +972,7 @@ async function agRenderKanban(card) {
     ${html}
   `;
   document.getElementById('kbVoltarBtn').addEventListener('click', () => { agModo = 'calendario'; agAtualizarDinamico(); });
-  card.querySelectorAll('[data-kb-os]').forEach(el => {
-    el.addEventListener('click', () => osAbrirComContexto({ osId: el.getAttribute('data-kb-os') }));
-  });
+  ligarCliquesKanban(card);
 }
 
 function agParaInputDatetime(iso) {
@@ -1038,6 +1130,7 @@ async function agRenderOS(card) {
       osExistente = osDireta;
       osContexto.agendaId = osDireta.agenda_id || null;
       osContexto.orcamentoId = osDireta.orcamento_id || null;
+      if (!osContexto.agendaId && !osContexto.orcamentoId) osContexto.clienteId = osDireta.cliente_id || osContexto.clienteId;
     }
   }
 
@@ -1060,15 +1153,13 @@ async function agRenderOS(card) {
     if (itens.length) { prefillItem = itens[0]; tipoPadrao = itens[0].tipo; }
     prefillValor = orc.valor_total;
     if (!osExistente) { const { data: os } = await supabaseClient.from('ordens_servico').select('*').eq('orcamento_id', osContexto.orcamentoId).maybeSingle(); osExistente = os; }
-  } else if (osExistente) {
-    // OS avulsa, sem agenda nem orçamento de origem — busca o cliente direto pela própria OS
-    clienteId = osExistente.cliente_id;
-    if (clienteId) {
-      const { data: cli } = await supabaseClient.from('clientes').select('nome,telefone,endereco').eq('id', clienteId).maybeSingle();
-      clienteInfo = cli;
-    }
+  } else if (osContexto.clienteId) {
+    // OS avulsa: sem agenda nem orçamento de origem — cliente foi escolhido direto (nova OS ou OS órfã já existente)
+    clienteId = osContexto.clienteId;
+    const { data: cli } = await supabaseClient.from('clientes').select('nome,telefone,endereco').eq('id', clienteId).maybeSingle();
+    clienteInfo = cli;
     cabecalhoTitulo = clienteInfo ? clienteInfo.nome : 'Ordem de serviço avulsa';
-    cabecalhoSub = 'Sem agendamento ou orçamento vinculado';
+    cabecalhoSub = osExistente ? 'Sem agendamento ou orçamento vinculado' : 'Nova ordem de serviço avulsa';
   }
   osContexto.clienteId = clienteId;
   osContexto.clienteNome = clienteInfo ? clienteInfo.nome : null;
