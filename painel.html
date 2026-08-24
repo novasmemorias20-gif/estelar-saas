@@ -440,6 +440,7 @@ async function renderInicio() {
       <h3>Ordens de serviço</h3>
       <div class="lista-item"><div class="info"><div class="titulo-item">Abertas</div></div><span style="font-weight:800; font-family:'Manrope',sans-serif;">${osAbertas}</span></div>
       <div class="lista-item"><div class="info"><div class="titulo-item">Em andamento</div></div><span style="font-weight:800; font-family:'Manrope',sans-serif;">${osAndamento}</span></div>
+      <div class="voltar-link" id="btnVerKanbanInicio">Ver quadro completo por status →</div>
     </div>
 
     <div class="card">
@@ -456,6 +457,7 @@ async function renderInicio() {
   conteudo.querySelectorAll('[data-ir-cliente]').forEach(el => {
     el.addEventListener('click', () => irParaFichaCliente(el.getAttribute('data-ir-cliente')));
   });
+  document.getElementById('btnVerKanbanInicio').addEventListener('click', irParaKanbanOS);
 }
 
 /* ===================== INÍCIO (DASHBOARD) FIM ===================== */
@@ -625,11 +627,7 @@ async function clVerDetalhes(id) {
     el.addEventListener('click', () => clAbrirAgendaItem(el.getAttribute('data-abrir-compromisso')));
   });
   conteudo.querySelectorAll('[data-abrir-os]').forEach(el => {
-    el.addEventListener('click', async () => {
-      const osRowId = el.getAttribute('data-abrir-os');
-      const { data: osRow } = await supabaseClient.from('ordens_servico').select('agenda_id, orcamento_id').eq('id', osRowId).single();
-      osAbrirComContexto({ agendaId: osRow.agenda_id || null, orcamentoId: osRow.orcamento_id || null });
-    });
+    el.addEventListener('click', () => osAbrirComContexto({ osId: el.getAttribute('data-abrir-os') }));
   });
 
   const selIntervalo = document.getElementById('clIntervaloEdit');
@@ -775,9 +773,11 @@ async function renderAgenda() {
       <div class="msg" id="agMsg"></div>
       <button class="btn" id="agSalvarBtn">Adicionar à agenda</button>
     </div>
+    <button class="btn btn-secundario" id="agVerKanbanBtn">📋 Ver ordens de serviço por status</button>
     <div class="card" id="agDinamicoCard"><p class="vazio">Carregando...</p></div>
   `;
   document.getElementById("agSalvarBtn").addEventListener("click", agSalvarNovo);
+  document.getElementById("agVerKanbanBtn").addEventListener("click", () => { agModo = 'kanban'; agAtualizarDinamico(); });
   await agAtualizarDinamico();
 }
 
@@ -825,6 +825,62 @@ async function agAtualizarDinamico() {
   else if (agModo === 'dia') await agRenderDia(card);
   else if (agModo === 'compromisso') await agRenderCompromisso(card);
   else if (agModo === 'os') await agRenderOS(card);
+  else if (agModo === 'kanban') await agRenderKanban(card);
+}
+
+async function irParaKanbanOS() {
+  ativarTab('agenda');
+  await renderAgenda();
+  agModo = 'kanban';
+  await agAtualizarDinamico();
+}
+
+async function agRenderKanban(card) {
+  const { data, error } = await supabaseClient
+    .from('ordens_servico')
+    .select('id, descricao, valor, status, pago, created_at, clientes(nome)')
+    .eq('empresa_id', empresaAtual.id)
+    .order('created_at', { ascending: false });
+
+  if (error) { card.innerHTML = '<div class="voltar-link" id="kbVoltarBtn" style="margin-top:0; text-align:left;">← Voltar ao calendário</div><p class="msg erro">Erro ao carregar ordens de serviço.</p>'; document.getElementById('kbVoltarBtn').addEventListener('click', () => { agModo = 'calendario'; agAtualizarDinamico(); }); return; }
+
+  const colunas = [
+    { status: 'aberta', titulo: 'Aberta', cor: 'agendado' },
+    { status: 'em_andamento', titulo: 'Em andamento', cor: 'agendado' },
+    { status: 'concluida', titulo: 'Concluída', cor: 'concluido' }
+  ];
+
+  const html = colunas.map(col => {
+    const itens = (data || []).filter(o => o.status === col.status);
+    const listaHtml = itens.length
+      ? itens.map(o => `
+          <div class="lista-item" style="cursor:pointer;" data-kb-os="${o.id}">
+            <div class="info">
+              <div class="titulo-item">${esc(o.clientes ? o.clientes.nome : (o.descricao || 'Ordem de serviço'))}</div>
+              <div class="sub-item">${esc(o.descricao || '')} · ${money(o.valor || 0)}</div>
+              ${o.pago ? '<span class="status-tag status-concluido">Pago</span>' : (col.status === 'concluida' ? '<span class="status-tag status-cancelado">A receber</span>' : '')}
+            </div>
+          </div>`).join('')
+      : '<p class="vazio" style="padding:14px 0;">Nada por aqui.</p>';
+    return `
+      <div style="margin-bottom:18px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+          <span class="status-tag status-${col.cor}">${col.titulo}</span>
+          <span style="font-size:12px; color:var(--cinza-texto); font-weight:600;">${itens.length}</span>
+        </div>
+        ${listaHtml}
+      </div>`;
+  }).join('');
+
+  card.innerHTML = `
+    <div class="voltar-link" id="kbVoltarBtn" style="margin-top:0; margin-bottom:12px; text-align:left;">← Voltar ao calendário</div>
+    <h3 style="font-size:16px;">Ordens de serviço por status</h3>
+    ${html}
+  `;
+  document.getElementById('kbVoltarBtn').addEventListener('click', () => { agModo = 'calendario'; agAtualizarDinamico(); });
+  card.querySelectorAll('[data-kb-os]').forEach(el => {
+    el.addEventListener('click', () => osAbrirComContexto({ osId: el.getAttribute('data-kb-os') }));
+  });
 }
 
 function agParaInputDatetime(iso) {
@@ -975,6 +1031,16 @@ async function agRenderDia(card) {
 async function agRenderOS(card) {
   let clienteInfo = null, clienteId = null, cabecalhoTitulo = '', cabecalhoSub = '', tipoPadrao = 'instalacao', osExistente = null, prefillItem = null, prefillValor = null;
 
+  // Se já sabemos o ID da própria OS, ela é a fonte da verdade — evita casos "órfãos" (sem agenda nem orçamento vinculado)
+  if (osContexto.osId) {
+    const { data: osDireta } = await supabaseClient.from('ordens_servico').select('*').eq('id', osContexto.osId).maybeSingle();
+    if (osDireta) {
+      osExistente = osDireta;
+      osContexto.agendaId = osDireta.agenda_id || null;
+      osContexto.orcamentoId = osDireta.orcamento_id || null;
+    }
+  }
+
   if (osContexto.agendaId) {
     const { data: ag } = await supabaseClient.from('agenda').select('*, clientes(nome,telefone,endereco)').eq('id', osContexto.agendaId).single();
     agAgendaAtualObj = ag;
@@ -983,8 +1049,7 @@ async function agRenderOS(card) {
     cabecalhoTitulo = ag.clientes ? ag.clientes.nome : ag.titulo;
     cabecalhoSub = agFormatarData(ag.data_hora) + ' · ' + agTipoLabel(ag.tipo);
     tipoPadrao = ag.tipo === 'manutencao' ? 'manutencao' : 'instalacao';
-    const { data: os } = await supabaseClient.from('ordens_servico').select('*').eq('agenda_id', osContexto.agendaId).maybeSingle();
-    osExistente = os;
+    if (!osExistente) { const { data: os } = await supabaseClient.from('ordens_servico').select('*').eq('agenda_id', osContexto.agendaId).maybeSingle(); osExistente = os; }
   } else if (osContexto.orcamentoId) {
     const { data: orc } = await supabaseClient.from('orcamentos').select('*, clientes(nome,telefone,endereco)').eq('id', osContexto.orcamentoId).single();
     clienteInfo = orc.clientes;
@@ -994,8 +1059,16 @@ async function agRenderOS(card) {
     const itens = (orc.dados && orc.dados.items) || [];
     if (itens.length) { prefillItem = itens[0]; tipoPadrao = itens[0].tipo; }
     prefillValor = orc.valor_total;
-    const { data: os } = await supabaseClient.from('ordens_servico').select('*').eq('orcamento_id', osContexto.orcamentoId).maybeSingle();
-    osExistente = os;
+    if (!osExistente) { const { data: os } = await supabaseClient.from('ordens_servico').select('*').eq('orcamento_id', osContexto.orcamentoId).maybeSingle(); osExistente = os; }
+  } else if (osExistente) {
+    // OS avulsa, sem agenda nem orçamento de origem — busca o cliente direto pela própria OS
+    clienteId = osExistente.cliente_id;
+    if (clienteId) {
+      const { data: cli } = await supabaseClient.from('clientes').select('nome,telefone,endereco').eq('id', clienteId).maybeSingle();
+      clienteInfo = cli;
+    }
+    cabecalhoTitulo = clienteInfo ? clienteInfo.nome : 'Ordem de serviço avulsa';
+    cabecalhoSub = 'Sem agendamento ou orçamento vinculado';
   }
   osContexto.clienteId = clienteId;
   osContexto.clienteNome = clienteInfo ? clienteInfo.nome : null;
@@ -1102,8 +1175,10 @@ async function agRenderOS(card) {
       ${osFormHtml}
       <button class="btn" id="osSalvarBtn">Salvar OS</button>
       <div class="msg" id="osMsg"></div>
+      <button class="btn btn-secundario" id="osExcluirBtn" style="color:var(--erro); border-color:var(--erro); margin-top:10px;">Excluir esta OS</button>
     `;
     document.getElementById('osSalvarBtn').addEventListener('click', () => osSalvar(osExistente.id));
+    document.getElementById('osExcluirBtn').addEventListener('click', () => osExcluir(osExistente.id));
   } else {
     card.innerHTML = cabecalho + `
       <h3 style="font-size:15px; margin-top:16px;">Criar ordem de serviço</h3>
@@ -1171,12 +1246,44 @@ async function osSalvar(osId) {
     forma_pagamento: formaPagamento,
     data_pagamento: dataPagamento
   };
-  let error;
-  if (osId) { ({ error } = await supabaseClient.from('ordens_servico').update(payload).eq('id', osId)); }
-  else { ({ error } = await supabaseClient.from('ordens_servico').insert(payload)); }
+  let error, novoId = osId;
+  if (osId) {
+    ({ error } = await supabaseClient.from('ordens_servico').update(payload).eq('id', osId));
+  } else {
+    const { data, error: erroInsercao } = await supabaseClient.from('ordens_servico').insert(payload).select().single();
+    error = erroInsercao;
+    if (data) novoId = data.id;
+  }
   if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar OS.'; return; }
+
+  // Toda OS precisa de um compromisso vinculado. Se essa OS não veio de um agendamento existente, cria um automaticamente.
+  if (!osId && !osContexto.agendaId && osContexto.clienteId) {
+    const tipoAgenda = dados.tipo === 'manutencao' ? 'manutencao' : (dados.tipo === 'instalacao' ? 'instalacao' : 'outro');
+    const { data: novoCompromisso } = await supabaseClient.from('agenda').insert({
+      empresa_id: empresaAtual.id,
+      cliente_id: osContexto.clienteId,
+      titulo: payload.descricao,
+      tipo: tipoAgenda,
+      data_hora: new Date().toISOString(),
+      observacoes: dados.tipo === 'higienizacao' ? 'Higienização' : ''
+    }).select().single();
+    if (novoCompromisso) {
+      await supabaseClient.from('ordens_servico').update({ agenda_id: novoCompromisso.id }).eq('id', novoId);
+      osContexto.agendaId = novoCompromisso.id;
+      osContexto.osId = novoId;
+    }
+  }
+
   msg.className = 'msg ok'; msg.textContent = 'Salvo!';
   setTimeout(() => agAtualizarDinamico(), 600);
+}
+
+async function osExcluir(osId) {
+  if (!confirm('Excluir esta ordem de serviço? Essa ação não pode ser desfeita.')) return;
+  const msg = document.getElementById('osMsg');
+  const { error } = await supabaseClient.from('ordens_servico').delete().eq('id', osId);
+  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao excluir.'; return; }
+  await voltarDoOS();
 }
 
 /* ===================== CALCULADORA DE ORÇAMENTO AVULSO ===================== */
