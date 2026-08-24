@@ -316,7 +316,7 @@ function mostrarAba(nome) {
       conteudo.innerHTML = '<div class="card"><h3>Contrato de manutenção</h3><p style="color: var(--cinza-texto); font-size: 14px;">Este recurso faz parte do Plano Completo.</p></div>';
       return;
     }
-    conteudo.innerHTML = '<div class="card"><h3>Contrato de manutenção</h3><p style="color: var(--cinza-texto); font-size: 14px;">Próximo passo: trazer a calculadora de contratos pra dentro desta aba.</p></div>';
+    renderContrato();
   } else if (nome === "config") {
     const emp = empresaAtual.precos.dadosEmpresa || {};
     conteudo.innerHTML = `<div class="card">
@@ -1462,6 +1462,515 @@ function ligarEventosAvulso() {
     ta.select();
     try { navigator.clipboard.writeText(ta.value); } catch (e) { try { document.execCommand('copy'); } catch (e2) {} }
   });
+}
+
+/* ===================== CONTRATO DE MANUTENÇÃO (PMOC) ===================== */
+
+const CT_VALORES_PADRAO = { pBaseSplit: 90, pBaseCassete: 110, pBasePisoTeto: 110, pBaseMulti: 90, pBaseVrf: 150, pPorte: 40, mAcessoMedio: 1.25, mAcessoDificil: 1.75, mCondRegular: 1.15, mCondRuim: 1.4, pKm: 2.5, pTaxaVisita: 0 };
+const CT_TIPOS = [{ id: 'split', label: 'Split Hi-Wall' }, { id: 'cassete', label: 'Cassete' }, { id: 'pisoteto', label: 'Piso Teto' }, { id: 'multi', label: 'Multi-Split (por evap.)' }, { id: 'vrf', label: 'VRF (por evap.)' }];
+const CT_PORTES = ['9k', '12k', '18k', '24k', '30k', '36k+'];
+const CT_ACESSOS = [{ id: 'facil', label: 'Fácil' }, { id: 'medio', label: 'Médio' }, { id: 'dificil', label: 'Difícil' }];
+const CT_CONDICOES = [{ id: 'bom', label: 'Bom' }, { id: 'regular', label: 'Regular' }, { id: 'ruim', label: 'Ruim' }];
+
+let ctEquipamentos = [];
+let ctContadorId = 0;
+let ctClientesCache = [];
+let ctContratoSalvoId = null;
+let ctSalvarConfigTimeout = null;
+
+function ctNovoEquip(dados) {
+  ctContadorId++;
+  const eq = Object.assign({ id: ctContadorId, tipo: 'split', porte: '9k', qtd: 1, acesso: 'facil', condicao: 'bom' }, dados || {});
+  if ((eq.tipo === 'multi' || eq.tipo === 'vrf') && !eq.evaps) eq.evaps = [{ porte: '9k', qtd: 1 }];
+  return eq;
+}
+
+function ctCfg() {
+  const ids = Object.keys(CT_VALORES_PADRAO);
+  const c = {};
+  ids.forEach(id => { c[id] = parseFloat(document.getElementById(id).value) || 0; });
+  return c;
+}
+
+function ctPrecoBase(tipo, c) {
+  const map = { split: 'pBaseSplit', cassete: 'pBaseCassete', pisoteto: 'pBasePisoTeto', multi: 'pBaseMulti', vrf: 'pBaseVrf' };
+  return c[map[tipo]] || 0;
+}
+
+function ctPrecoPorte(porte, c) {
+  const idx = CT_PORTES.indexOf(porte);
+  return idx >= 2 ? (c.pPorte || 0) * (idx - 1) : 0;
+}
+
+function ctCalcularItem(eq, c) {
+  const mAcesso = eq.acesso === 'medio' ? c.mAcessoMedio : (eq.acesso === 'dificil' ? c.mAcessoDificil : 1);
+  const mCondicao = eq.condicao === 'regular' ? c.mCondRegular : (eq.condicao === 'ruim' ? c.mCondRuim : 1);
+  const taxaVisita = c.pTaxaVisita || 0;
+  if (eq.tipo === 'multi' || eq.tipo === 'vrf') {
+    const base = ctPrecoBase(eq.tipo, c);
+    let soma = 0;
+    (eq.evaps || []).forEach(ev => { soma += (base + ctPrecoPorte(ev.porte, c)) * (parseInt(ev.qtd) || 1); });
+    return (soma * mAcesso * mCondicao) + taxaVisita;
+  }
+  let preco = ctPrecoBase(eq.tipo, c) + ctPrecoPorte(eq.porte, c);
+  preco *= mAcesso * mCondicao;
+  preco += taxaVisita;
+  return preco * eq.qtd;
+}
+
+function ctBtuDoPorte(porte) {
+  return { '9k': 9000, '12k': 12000, '18k': 18000, '24k': 24000, '30k': 30000, '36k+': 36000 }[porte] || 0;
+}
+
+function ctCargaTermicaTotal() {
+  let btu = 0, temPortePlus = false;
+  ctEquipamentos.forEach(e => {
+    if (e.tipo === 'multi' || e.tipo === 'vrf') {
+      (e.evaps || []).forEach(ev => { btu += ctBtuDoPorte(ev.porte) * (parseInt(ev.qtd) || 1); if (ev.porte === '36k+') temPortePlus = true; });
+    } else {
+      btu += ctBtuDoPorte(e.porte) * (parseInt(e.qtd) || 1);
+      if (e.porte === '36k+') temPortePlus = true;
+    }
+  });
+  return { btu, tr: btu / 12000, temPortePlus };
+}
+
+function ctVisitasPorAno() {
+  const v = document.getElementById('ctFreqPreset').value;
+  if (v === 'custom') return Math.max(1, parseInt(document.getElementById('ctFreqCustom').value) || 1);
+  return parseInt(v);
+}
+
+function renderContrato() {
+  ctEquipamentos = [ctNovoEquip()];
+  const conf = Object.assign({}, CT_VALORES_PADRAO, (empresaAtual.precos.pmoc || {}));
+
+  document.getElementById("conteudo").innerHTML = `
+    <div id="ctEditor">
+      <div class="card">
+        <h3>Cliente</h3>
+        <label>Cliente cadastrado</label>
+        <select id="ctClienteSelect"><option value="">— selecionar cliente —</option></select>
+        <label>Tipo de local</label>
+        <select id="ctClienteTipo">
+          <option>Empresa / Escritório</option><option>Hotel / Pousada</option><option>Mercado / Varejo</option>
+          <option>Clínica / Consultório</option><option>Indústria</option><option>Condomínio</option><option>Outro</option>
+        </select>
+        <label>CNPJ / CPF</label><input type="text" id="ctClienteCnpj" placeholder="00.000.000/0000-00">
+        <label>Nome do responsável</label><input type="text" id="ctClienteResponsavel" placeholder="Quem está fechando o contrato">
+        <label>Contato (WhatsApp)</label><input type="text" id="ctClienteContato" placeholder="(18) 9....">
+        <label>Endereço / Cidade</label><input type="text" id="ctClienteEndereco" placeholder="Bairro, cidade">
+      </div>
+
+      <div class="card">
+        <h3>Equipamentos</h3>
+        <p class="note" style="margin-top:-6px;">Adicione cada aparelho ou grupo de aparelhos iguais do contrato.</p>
+        <div id="ctListaEquip"></div>
+        <button class="add-btn" id="ctAddEquipBtn">+ Adicionar equipamento</button>
+      </div>
+
+      <div class="card">
+        <h3>Deslocamento e frequência</h3>
+        <label>Distância até o local (km, ida)</label>
+        <input type="number" id="ctDistanciaKm" value="0" min="0">
+        <label>Visitas por ano</label>
+        <select id="ctFreqPreset">
+          <option value="12">Mensal (12x/ano)</option><option value="4">Trimestral (4x/ano)</option>
+          <option value="2">Semestral (2x/ano)</option><option value="1">Anual (1x/ano)</option>
+          <option value="custom">Personalizado</option>
+        </select>
+        <div class="field hidden" id="ctFreqCustomWrap">
+          <label>Número de visitas por ano (personalizado)</label>
+          <input type="number" id="ctFreqCustom" value="6" min="1">
+        </div>
+      </div>
+
+      <div class="card">
+        <details>
+          <summary>Ajustar tabela de preços (valores médios editáveis)</summary>
+          <div class="note">Preço base = por visita, por equipamento. Ajuste aqui e o cálculo já atualiza.</div>
+          <div class="price-grid">
+            <span>Base Split (R$)</span><input type="number" id="pBaseSplit" value="${conf.pBaseSplit}">
+            <span>Base Cassete (R$)</span><input type="number" id="pBaseCassete" value="${conf.pBaseCassete}">
+            <span>Base Piso Teto (R$)</span><input type="number" id="pBasePisoTeto" value="${conf.pBasePisoTeto}">
+            <span>Base Multi-Split (R$/evap.)</span><input type="number" id="pBaseMulti" value="${conf.pBaseMulti}">
+            <span>Base VRF (R$/evap.)</span><input type="number" id="pBaseVrf" value="${conf.pBaseVrf}">
+            <span>Adicional por porte 18k+ (R$)</span><input type="number" id="pPorte" value="${conf.pPorte}">
+            <span>Mult. acesso médio</span><input type="number" step="0.05" id="mAcessoMedio" value="${conf.mAcessoMedio}">
+            <span>Mult. acesso difícil</span><input type="number" step="0.05" id="mAcessoDificil" value="${conf.mAcessoDificil}">
+            <span>Mult. condição regular</span><input type="number" step="0.05" id="mCondRegular" value="${conf.mCondRegular}">
+            <span>Mult. condição ruim</span><input type="number" step="0.05" id="mCondRuim" value="${conf.mCondRuim}">
+            <span>R$ por km (ida e volta)</span><input type="number" step="0.5" id="pKm" value="${conf.pKm}">
+            <span>Taxa fixa/visita (R$)</span><input type="number" id="pTaxaVisita" value="${conf.pTaxaVisita}">
+          </div>
+        </details>
+      </div>
+
+      <div class="result">
+        <div class="label">Valor por visita</div>
+        <div class="value" id="ctTotalVisita">R$ 0,00</div>
+        <div class="breakdown" id="ctTotalAnual"></div>
+      </div>
+      <div class="card">
+        <div class="note" style="margin-top:0;">Carga térmica total (uso interno, não aparece no orçamento do cliente)</div>
+        <div style="font-family:'Manrope',sans-serif; font-weight:800; font-size:16px; margin-top:4px;" id="ctCargaValores">0 BTU/h · 0,0 TR</div>
+        <span class="status-tag" id="ctBadge" style="margin-top:8px;"></span>
+      </div>
+
+      <button class="btn btn-secundario" id="ctVerPropostaBtn">Ver proposta para o cliente</button>
+      <button class="btn" id="ctSalvarBtn">Salvar contrato no histórico do cliente</button>
+      <div class="msg" id="ctSalvarMsg"></div>
+
+      <div class="card" id="ctGerarContratoBox" style="margin-top:14px;">
+        <label>Modelo de contrato</label>
+        <select id="ctTipoOverride">
+          <option value="auto">Automático (pela carga térmica)</option>
+          <option value="pequena">Forçar: pequenas empresas (sem RT)</option>
+          <option value="grande">Forçar: empresas maiores (com RT/ART)</option>
+        </select>
+        <button class="btn btn-ambar" id="ctGerarContratoBtn">Gerar contrato preenchido</button>
+      </div>
+    </div>
+
+    <div id="ctPropostaView" class="hidden">
+      <div class="proposal">
+        <div class="proposal-header">
+          <div class="brand">${esc(empresaAtual.nome_empresa)}</div>
+          <div class="tagline">Orçamento — Contrato de manutenção</div>
+        </div>
+        <div class="proposal-items" id="ctPropostaItems"></div>
+        <div class="proposal-total"><span class="lbl">Valor por visita</span><span class="val" id="ctPropostaTotal">R$ 0,00</span></div>
+        <div class="proposal-condicoes" id="ctPropostaCondicoes"></div>
+        <div class="proposal-marca">feito no Estelar Orçamentos</div>
+      </div>
+      <div class="action-row">
+        <button class="btn btn-secundario" id="ctPrintBtn">Salvar / imprimir PDF</button>
+        <button class="btn btn-secundario" id="ctWhatsappBtn">Texto p/ WhatsApp</button>
+      </div>
+      <textarea id="ctWhatsappText" class="hidden" readonly></textarea>
+      <div class="voltar-link" id="ctVoltarPropostaBtn">← Voltar para edição</div>
+    </div>
+
+    <div id="ctContratoView" class="hidden">
+      <div class="proposal" id="ctContratoConteudo" style="padding: 24px 20px; font-size: 13px; line-height: 1.55;"></div>
+      <div class="action-row"><button class="btn btn-secundario" id="ctPrintContratoBtn">Salvar / imprimir PDF</button></div>
+      <div class="voltar-link" id="ctVoltarContratoBtn">← Voltar para edição</div>
+    </div>
+  `;
+
+  ligarEventosContrato();
+  ctRenderEquip();
+
+  supabaseClient.from('clientes').select('id,nome,telefone,endereco').eq('empresa_id', empresaAtual.id).order('nome').then(({ data }) => {
+    ctClientesCache = data || [];
+    const select = document.getElementById('ctClienteSelect');
+    if (select) select.innerHTML = '<option value="">— selecionar cliente —</option>' + ctClientesCache.map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('');
+  });
+}
+
+function ctRenderEquip() {
+  const el = document.getElementById('ctListaEquip');
+  el.innerHTML = ctEquipamentos.map((e, i) => {
+    const ehMultiplo = (e.tipo === 'multi' || e.tipo === 'vrf');
+    const seletorTipo = `<select data-eq="${e.id}" data-campo="tipo">${CT_TIPOS.map(t => `<option value="${t.id}" ${e.tipo === t.id ? 'selected' : ''}>${t.label}</option>`).join('')}</select>`;
+    const seletorAcesso = `<select data-eq="${e.id}" data-campo="acesso">${CT_ACESSOS.map(a => `<option value="${a.id}" ${e.acesso === a.id ? 'selected' : ''}>${a.label}</option>`).join('')}</select>`;
+    const seletorCondicao = `<select data-eq="${e.id}" data-campo="condicao">${CT_CONDICOES.map(c => `<option value="${c.id}" ${e.condicao === c.id ? 'selected' : ''}>${c.label}</option>`).join('')}</select>`;
+
+    if (ehMultiplo) {
+      const evapsHtml = (e.evaps || []).map((ev, idx) => `
+        <div class="price-grid" style="grid-template-columns: 1fr 70px 32px; margin-top:6px;">
+          <select data-eq="${e.id}" data-evap="${idx}" data-campo="porte">${CT_PORTES.map(p => `<option ${ev.porte === p ? 'selected' : ''}>${p}</option>`).join('')}</select>
+          <input type="number" min="1" value="${ev.qtd}" data-eq="${e.id}" data-evap="${idx}" data-campo="qtd">
+          <button class="remove-btn" data-remove-evap="${e.id}:${idx}">✕</button>
+        </div>`).join('');
+      return `
+        <div class="item-card">
+          <div class="item-header"><span>Item ${i + 1} — Condensadora (${ehMultiplo ? 'multi/VRF' : ''})</span><button class="remove-btn" data-remove-equip="${e.id}">✕</button></div>
+          <label>Tipo</label>${seletorTipo}
+          <label>Acesso</label>${seletorAcesso}
+          <label>Condição</label>${seletorCondicao}
+          <label>Evaporadoras nesta condensadora</label>
+          ${evapsHtml}
+          <button class="add-btn" style="margin-top:10px; padding:9px;" data-add-evap="${e.id}">+ Evaporadora</button>
+        </div>`;
+    }
+    return `
+      <div class="item-card">
+        <div class="item-header"><span>Item ${i + 1} — ${CT_TIPOS.find(t => t.id === e.tipo).label}</span><button class="remove-btn" data-remove-equip="${e.id}">✕</button></div>
+        <label>Tipo</label>${seletorTipo}
+        <label>Porte</label><select data-eq="${e.id}" data-campo="porte">${CT_PORTES.map(p => `<option ${e.porte === p ? 'selected' : ''}>${p}</option>`).join('')}</select>
+        <label>Quantidade</label><input type="number" min="1" value="${e.qtd}" data-eq="${e.id}" data-campo="qtd">
+        <label>Acesso</label>${seletorAcesso}
+        <label>Condição</label>${seletorCondicao}
+      </div>`;
+  }).join('');
+  ctCalcular();
+}
+
+function ctCalcular() {
+  const c = ctCfg();
+  const totalEquip = ctEquipamentos.reduce((s, e) => s + ctCalcularItem(e, c), 0);
+  const km = parseFloat(document.getElementById('ctDistanciaKm').value) || 0;
+  const custoKm = km * (c.pKm || 0);
+  const totalVisita = totalEquip + custoKm;
+  const visitas = ctVisitasPorAno();
+  const totalAnual = totalVisita * visitas;
+
+  document.getElementById('ctTotalVisita').textContent = money(totalVisita);
+  document.getElementById('ctTotalAnual').innerHTML = `<div><span>Anual estimado</span><span>${money(totalAnual)} · ${visitas}x/ano</span></div>`;
+
+  const { btu, tr, temPortePlus } = ctCargaTermicaTotal();
+  document.getElementById('ctCargaValores').textContent = `${btu.toLocaleString('pt-BR')}${temPortePlus ? '+' : ''} BTU/h · ${tr.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}${temPortePlus ? '+' : ''} TR`;
+  const badge = document.getElementById('ctBadge');
+  if (btu >= 60000) { badge.className = 'status-tag status-cancelado'; badge.textContent = '≥ 5 TR — exige Responsável Técnico e ART'; }
+  else { badge.className = 'status-tag status-concluido'; badge.textContent = '< 5 TR — PMOC simplificado (sem RT/ART)'; }
+}
+
+function ctSalvarConfigDebounced() {
+  clearTimeout(ctSalvarConfigTimeout);
+  ctSalvarConfigTimeout = setTimeout(async () => {
+    const c = ctCfg();
+    empresaAtual.precos = Object.assign({}, empresaAtual.precos, { pmoc: c });
+    await supabaseClient.from('empresas').update({ precos: empresaAtual.precos }).eq('id', empresaAtual.id);
+  }, 800);
+}
+
+function ligarEventosContrato() {
+  document.getElementById('ctAddEquipBtn').addEventListener('click', () => { ctEquipamentos.push(ctNovoEquip()); ctRenderEquip(); });
+
+  document.getElementById('ctListaEquip').addEventListener('change', (e) => {
+    const eqId = parseInt(e.target.getAttribute('data-eq'));
+    const campo = e.target.getAttribute('data-campo');
+    const evapIdx = e.target.getAttribute('data-evap');
+    if (!eqId || !campo) return;
+    const eq = ctEquipamentos.find(x => x.id === eqId);
+    if (!eq) return;
+    if (evapIdx !== null) {
+      const idx = parseInt(evapIdx);
+      eq.evaps[idx][campo] = campo === 'qtd' ? Math.max(1, parseInt(e.target.value) || 1) : e.target.value;
+      ctCalcular();
+      return;
+    }
+    if (campo === 'tipo') {
+      eq.tipo = e.target.value;
+      if ((e.target.value === 'multi' || e.target.value === 'vrf') && !eq.evaps) eq.evaps = [{ porte: '9k', qtd: 1 }];
+      ctRenderEquip();
+      return;
+    }
+    eq[campo] = campo === 'qtd' ? Math.max(1, parseInt(e.target.value) || 1) : e.target.value;
+    ctCalcular();
+  });
+
+  document.getElementById('ctListaEquip').addEventListener('click', (e) => {
+    const remEquip = e.target.getAttribute('data-remove-equip');
+    if (remEquip) { ctEquipamentos = ctEquipamentos.filter(x => x.id !== parseInt(remEquip)); ctRenderEquip(); return; }
+    const addEvap = e.target.getAttribute('data-add-evap');
+    if (addEvap) { const eq = ctEquipamentos.find(x => x.id === parseInt(addEvap)); eq.evaps.push({ porte: '9k', qtd: 1 }); ctRenderEquip(); return; }
+    const remEvap = e.target.getAttribute('data-remove-evap');
+    if (remEvap) {
+      const [eqId, idx] = remEvap.split(':').map(Number);
+      const eq = ctEquipamentos.find(x => x.id === eqId);
+      eq.evaps.splice(idx, 1);
+      if (eq.evaps.length === 0) eq.evaps.push({ porte: '9k', qtd: 1 });
+      ctRenderEquip();
+    }
+  });
+
+  document.getElementById('ctDistanciaKm').addEventListener('input', ctCalcular);
+  document.getElementById('ctFreqPreset').addEventListener('change', () => {
+    document.getElementById('ctFreqCustomWrap').classList.toggle('hidden', document.getElementById('ctFreqPreset').value !== 'custom');
+    ctCalcular();
+  });
+  document.getElementById('ctFreqCustom').addEventListener('input', ctCalcular);
+  document.querySelectorAll('#ctEditor .price-grid input').forEach(el => {
+    if (el.id) el.addEventListener('input', () => { ctCalcular(); ctSalvarConfigDebounced(); });
+  });
+
+  document.getElementById('ctClienteSelect').addEventListener('change', (e) => {
+    const c = ctClientesCache.find(c => c.id === e.target.value);
+    if (c) {
+      document.getElementById('ctClienteContato').value = c.telefone || '';
+      document.getElementById('ctClienteEndereco').value = c.endereco || '';
+    }
+  });
+
+  document.getElementById('ctVerPropostaBtn').addEventListener('click', ctMontarProposta);
+  document.getElementById('ctVoltarPropostaBtn').addEventListener('click', () => {
+    document.getElementById('ctPropostaView').classList.add('hidden');
+    document.getElementById('ctEditor').classList.remove('hidden');
+  });
+  document.getElementById('ctPrintBtn').addEventListener('click', () => window.print());
+  document.getElementById('ctWhatsappBtn').addEventListener('click', () => {
+    const ta = document.getElementById('ctWhatsappText');
+    ta.classList.remove('hidden');
+    ta.select();
+    try { navigator.clipboard.writeText(ta.value); } catch (e) { try { document.execCommand('copy'); } catch (e2) {} }
+  });
+
+  document.getElementById('ctSalvarBtn').addEventListener('click', ctSalvarContrato);
+  document.getElementById('ctGerarContratoBtn').addEventListener('click', ctMontarContrato);
+  document.getElementById('ctVoltarContratoBtn').addEventListener('click', () => {
+    document.getElementById('ctContratoView').classList.add('hidden');
+    document.getElementById('ctEditor').classList.remove('hidden');
+  });
+  document.getElementById('ctPrintContratoBtn').addEventListener('click', () => window.print());
+}
+
+function ctNomeClienteSelecionado() {
+  const sel = document.getElementById('ctClienteSelect');
+  const c = ctClientesCache.find(c => c.id === sel.value);
+  return c ? c.nome : '';
+}
+
+function ctMontarProposta() {
+  const c = ctCfg();
+  const linhas = [];
+  let totalEquip = 0;
+  ctEquipamentos.forEach(e => {
+    const valor = ctCalcularItem(e, c);
+    totalEquip += valor;
+    const ehMultiplo = (e.tipo === 'multi' || e.tipo === 'vrf');
+    const porteTxt = ehMultiplo ? (e.evaps || []).map(ev => `${ev.qtd}x ${ev.porte}`).join(', ') : e.porte;
+    const qtdTxt = ehMultiplo ? (e.evaps || []).reduce((s, ev) => s + (parseInt(ev.qtd) || 1), 0) : e.qtd;
+    linhas.push({ titulo: CT_TIPOS.find(t => t.id === e.tipo).label, detalhe: `${porteTxt} · ${qtdTxt}x · acesso ${CT_ACESSOS.find(a => a.id === e.acesso).label.toLowerCase()}`, valor });
+  });
+  const km = parseFloat(document.getElementById('ctDistanciaKm').value) || 0;
+  const custoKm = km * (c.pKm || 0);
+  const totalVisita = totalEquip + custoKm;
+  const visitas = ctVisitasPorAno();
+  const totalAnual = totalVisita * visitas;
+  const nomeCliente = ctNomeClienteSelecionado();
+
+  document.getElementById('ctPropostaItems').innerHTML = linhas.map(l => `<div class="proposal-item"><div class="titulo">${esc(l.titulo)}</div><div class="detalhe">${esc(l.detalhe)}</div><div class="preco">${money(l.valor)}</div></div>`).join('')
+    + `<div class="proposal-item"><div class="titulo">Deslocamento</div><div class="detalhe">${km} km (ida e volta)</div><div class="preco">${money(custoKm)}</div></div>`;
+  document.getElementById('ctPropostaTotal').textContent = money(totalVisita);
+  document.getElementById('ctPropostaCondicoes').innerHTML = `<b>Condições</b>${visitas}x de visitas por ano · total anual estimado ${money(totalAnual)}. Inclui deslocamento. Peças e materiais não inclusos — orçados à parte quando necessário.`;
+
+  const whatsLines = linhas.map(l => `• ${l.titulo} (${l.detalhe}): ${money(l.valor)}`);
+  const whatsText = `Orçamento — Contrato de manutenção — ${empresaAtual.nome_empresa}` + (nomeCliente ? ' — ' + nomeCliente : '') + '\n\n' + whatsLines.join('\n') + `\n\nValor por visita: ${money(totalVisita)}\n${visitas}x/ano · Total anual estimado: ${money(totalAnual)}`;
+  document.getElementById('ctWhatsappText').value = whatsText;
+
+  document.getElementById('ctEditor').classList.add('hidden');
+  document.getElementById('ctPropostaView').classList.remove('hidden');
+}
+
+async function ctSalvarContrato() {
+  const msg = document.getElementById('ctSalvarMsg');
+  const clienteId = document.getElementById('ctClienteSelect').value;
+  if (!clienteId) { msg.className = 'msg erro'; msg.textContent = 'Selecione um cliente cadastrado (aba Clientes) pra salvar o contrato.'; return; }
+  const c = ctCfg();
+  const totalEquip = ctEquipamentos.reduce((s, e) => s + ctCalcularItem(e, c), 0);
+  const km = parseFloat(document.getElementById('ctDistanciaKm').value) || 0;
+  const custoKm = km * (c.pKm || 0);
+  const totalVisita = totalEquip + custoKm;
+  const visitas = ctVisitasPorAno();
+  const totalAnual = totalVisita * visitas;
+
+  const dados = {
+    equipamentos: ctEquipamentos.map(({ id, ...resto }) => resto),
+    distanciaKm: km,
+    freqPreset: document.getElementById('ctFreqPreset').value,
+    freqCustom: document.getElementById('ctFreqCustom').value,
+    tipoLocal: document.getElementById('ctClienteTipo').value,
+    cnpj: document.getElementById('ctClienteCnpj').value,
+    responsavel: document.getElementById('ctClienteResponsavel').value,
+    contato: document.getElementById('ctClienteContato').value,
+    endereco: document.getElementById('ctClienteEndereco').value
+  };
+
+  const { data, error } = await supabaseClient.from('contratos').insert({
+    empresa_id: empresaAtual.id,
+    cliente_id: clienteId,
+    dados,
+    valor_visita: totalVisita,
+    valor_anual: totalAnual,
+    status: 'rascunho'
+  }).select().single();
+
+  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar contrato.'; return; }
+  ctContratoSalvoId = data.id;
+  msg.className = 'msg ok'; msg.textContent = 'Contrato salvo no histórico do cliente!';
+}
+
+function ctMontarContrato() {
+  const override = document.getElementById('ctTipoOverride').value;
+  const { btu } = ctCargaTermicaTotal();
+  const ehGrande = override === 'auto' ? (btu >= 60000) : (override === 'grande');
+
+  const nomeCliente = esc(ctNomeClienteSelecionado() || '________________________');
+  const tipoLocal = esc(document.getElementById('ctClienteTipo').value);
+  const enderecoCliente = esc(document.getElementById('ctClienteEndereco').value || '________________________');
+  const cnpjCliente = esc(document.getElementById('ctClienteCnpj').value || '________________________');
+  const responsavelCliente = esc(document.getElementById('ctClienteResponsavel').value || '________________________');
+
+  const c = ctCfg();
+  const totalEquip = ctEquipamentos.reduce((s, e) => s + ctCalcularItem(e, c), 0);
+  const km = parseFloat(document.getElementById('ctDistanciaKm').value) || 0;
+  const custoKm = km * (c.pKm || 0);
+  const totalVisita = totalEquip + custoKm;
+  const visitas = ctVisitasPorAno();
+  const totalAnual = totalVisita * visitas;
+  const dataHoje = new Date().toLocaleDateString('pt-BR');
+
+  const linhasEquip = ctEquipamentos.map((e, i) => {
+    const ehMultiplo = (e.tipo === 'multi' || e.tipo === 'vrf');
+    const tipoLbl = CT_TIPOS.find(t => t.id === e.tipo).label;
+    const porteCol = ehMultiplo ? (e.evaps || []).map(ev => `${ev.qtd}x ${ev.porte}`).join(', ') : e.porte;
+    const qtdCol = ehMultiplo ? (e.evaps || []).reduce((s, ev) => s + (parseInt(ev.qtd) || 1), 0) : e.qtd;
+    return `<tr><td style="padding:6px 8px; border-bottom:1px solid var(--cinza-linha);">${i + 1}</td><td style="padding:6px 8px; border-bottom:1px solid var(--cinza-linha);">${esc(tipoLbl)}</td><td style="padding:6px 8px; border-bottom:1px solid var(--cinza-linha);">${esc(porteCol)}</td><td style="padding:6px 8px; border-bottom:1px solid var(--cinza-linha);">${qtdCol}</td></tr>`;
+  }).join('');
+
+  const clausulaRT = ehGrande ? `
+    <p><b>CLÁUSULA 4ª – DA RESPONSABILIDADE TÉCNICA.</b> A CONTRATADA indicará profissional habilitado, devidamente registrado no CREA/CFT sob o nº ____________, como Responsável Técnico (RT) pela execução do PMOC, cabendo a este a emissão da respectiva Anotação de Responsabilidade Técnica (ART), cujo custo correrá por conta de ____________.</p>
+    <p><b>CLÁUSULA 5ª – DO LIVRO DE REGISTRO.</b> A CONTRATADA manterá disponível no estabelecimento da CONTRATANTE, ou em meio digital de fácil acesso, o registro de todas as intervenções realizadas, ficando à disposição dos órgãos de vigilância sanitária e demais autoridades fiscalizadoras.</p>
+  ` : `<p><b>CLÁUSULA 4ª – DO REGISTRO DAS ATIVIDADES.</b> A CONTRATADA manterá registro simplificado das visitas realizadas, com data e descrição sucinta dos serviços executados, disponibilizando-o à CONTRATANTE sempre que solicitado.</p>`;
+
+  const objetoTexto = ehGrande
+    ? `O presente contrato tem por objeto a prestação, pela CONTRATADA à CONTRATANTE, de serviços de manutenção preventiva e execução do Plano de Manutenção, Operação e Controle (PMOC) dos sistemas de climatização relacionados no Anexo I, em conformidade com a Lei Federal nº 13.589/2018 e com a norma técnica ABNT NBR 13971, sob responsabilidade técnica de profissional habilitado nos termos da Cláusula 4ª.`
+    : `O presente contrato tem por objeto a prestação, pela CONTRATADA à CONTRATANTE, de serviços de manutenção preventiva periódica dos equipamentos relacionados no Anexo I, incluindo a elaboração e execução do PMOC em sua forma simplificada, nos termos da Lei Federal nº 13.589/2018, aplicável a sistemas com carga térmica total inferior a 60.000 BTU/h (5 TR), dispensando-se a indicação de responsável técnico habilitado e a emissão de ART.`;
+
+  const n = ehGrande ? { obrigContratante: '6ª', obrigContratada: '7ª', pecas: '8ª', valor: '9ª', vigencia: '10ª', rescisao: '11ª', foro: '12ª' }
+    : { obrigContratante: '5ª', obrigContratada: '6ª', pecas: '7ª', valor: '8ª', vigencia: '9ª', rescisao: '10ª', foro: '11ª' };
+
+  document.getElementById('ctContratoConteudo').innerHTML = `
+    <h2 style="text-align:center; font-family:'Manrope',sans-serif; font-size:18px; color:var(--escuro); margin-bottom:2px;">CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE MANUTENÇÃO</h2>
+    <p style="text-align:center; color:var(--azul); font-style:italic; font-size:12.5px; margin-top:0;">PMOC — Plano de Manutenção, Operação e Controle · ${ehGrande ? 'com Responsabilidade Técnica' : 'modelo simplificado'}</p>
+
+    <h3 style="border-bottom:2px solid var(--ambar); padding-bottom:4px; font-size:14px; color:var(--escuro);">Partes</h3>
+    <p><b>CONTRATANTE:</b> ${nomeCliente}<br><b>Tipo de local:</b> ${tipoLocal}<br><b>Endereço:</b> ${enderecoCliente}<br><b>CNPJ/CPF:</b> ${cnpjCliente}<br><b>Representante legal:</b> ${responsavelCliente}</p>
+    <p>doravante denominada CONTRATANTE; e, de outro lado,</p>
+    <p><b>CONTRATADA:</b> ${esc(empresaAtual.nome_empresa)}<br><b>Contato:</b> ${esc((empresaAtual.precos.dadosEmpresa && empresaAtual.precos.dadosEmpresa.telefone) || '________________________')}<br><b>CNPJ:</b> ${esc((empresaAtual.precos.dadosEmpresa && empresaAtual.precos.dadosEmpresa.cnpj) || '________________________')}</p>
+    <p>doravante denominada CONTRATADA, têm entre si justo e contratado o que segue.</p>
+
+    <h3 style="border-bottom:2px solid var(--ambar); padding-bottom:4px; font-size:14px; color:var(--escuro);">Cláusulas</h3>
+    <p><b>CLÁUSULA 1ª – DO OBJETO.</b> ${objetoTexto}</p>
+    <p><b>CLÁUSULA 2ª – DOS EQUIPAMENTOS.</b> Os equipamentos objeto deste contrato estão relacionados no Anexo I, parte integrante deste instrumento, o qual será atualizado sempre que houver inclusão, substituição ou baixa de equipamentos.</p>
+    <p><b>CLÁUSULA 3ª – DA PERIODICIDADE E DAS ATIVIDADES.</b> As visitas de manutenção ocorrerão na frequência de ${visitas} vez(es) ao ano, compreendendo limpeza e/ou substituição de filtros, higienização de bandejas e drenos, verificação de gás refrigerante, inspeção de componentes elétricos e mecânicos, e demais procedimentos previstos na ABNT NBR 13971, com relatório entregue à CONTRATANTE após cada visita.</p>
+    ${clausulaRT}
+    <p><b>CLÁUSULA ${n.obrigContratante} – DAS OBRIGAÇÕES DA CONTRATANTE.</b> Permitir livre acesso da equipe da CONTRATADA aos equipamentos; comunicar previamente qualquer alteração no parque de equipamentos; e zelar pelo uso adequado dos sistemas entre as visitas.</p>
+    <p><b>CLÁUSULA ${n.obrigContratada} – DAS OBRIGAÇÕES DA CONTRATADA.</b> Executar os serviços conforme cronograma e boas práticas técnicas, utilizando EPI e observando as normas de segurança do trabalho.</p>
+    <p><b>CLÁUSULA ${n.pecas} – DE PEÇAS E MATERIAIS.</b> Este contrato compreende exclusivamente mão de obra de manutenção preventiva. Peças e materiais de reposição não estão inclusos, sendo orçados à parte e executados somente mediante aprovação da CONTRATANTE.</p>
+    <p><b>CLÁUSULA ${n.valor} – DO VALOR E FORMA DE PAGAMENTO.</b> Pelos serviços prestados, a CONTRATANTE pagará à CONTRATADA o valor de ${money(totalVisita)} por visita, totalizando ${money(totalAnual)} ao ano, com vencimento a combinar, podendo o valor ser reajustado anualmente pelo índice IGP-M/IPCA.</p>
+    <p><b>CLÁUSULA ${n.vigencia} – DA VIGÊNCIA E RENOVAÇÃO.</b> O presente contrato vigorará pelo prazo de 12 (doze) meses a contar da assinatura, renovando-se automaticamente por períodos iguais, salvo manifestação em contrário com antecedência mínima de 30 dias.</p>
+    <p><b>CLÁUSULA ${n.rescisao} – DA RESCISÃO.</b> Qualquer das partes poderá rescindir o contrato mediante aviso prévio de 30 dias, sem prejuízo do pagamento pelos serviços já executados.</p>
+    <p><b>CLÁUSULA ${n.foro} – DO FORO.</b> Fica eleito o foro da comarca de ________________________ para dirimir quaisquer controvérsias oriundas deste contrato.</p>
+
+    <p style="margin-top:20px;">${dataHoje}.</p>
+    <div style="text-align:center; margin-top:50px;"><div style="border-top:1px solid #333; width:280px; margin:0 auto; padding-top:6px; font-weight:600; font-size:13px;">CONTRATANTE — ${nomeCliente}</div></div>
+    <div style="text-align:center; margin-top:40px;"><div style="border-top:1px solid #333; width:280px; margin:0 auto; padding-top:6px; font-weight:600; font-size:13px;">CONTRATADA — ${esc(empresaAtual.nome_empresa)}</div></div>
+
+    <h3 style="border-bottom:2px solid var(--ambar); padding-bottom:4px; font-size:14px; color:var(--escuro); margin-top:32px;">Anexo I — Relação de Equipamentos</h3>
+    <table style="width:100%; border-collapse:collapse; font-size:12.5px; margin-top:8px;">
+      <thead><tr style="background:var(--cinza-claro);"><th style="text-align:left; padding:6px 8px;">Item</th><th style="text-align:left; padding:6px 8px;">Tipo</th><th style="text-align:left; padding:6px 8px;">Porte</th><th style="text-align:left; padding:6px 8px;">Qtd.</th></tr></thead>
+      <tbody>${linhasEquip}</tbody>
+    </table>
+    <p style="margin-top:12px; font-size:12.5px;"><b>Frequência:</b> ${visitas}x/ano · <b>Deslocamento:</b> ${km} km · <b>Valor/visita:</b> ${money(totalVisita)} · <b>Valor anual estimado:</b> ${money(totalAnual)}</p>
+    <p style="font-size:11px; color:var(--cinza-texto); margin-top:16px;">Minuta gerada automaticamente a partir do orçamento. Revise dados cadastrais (CNPJ, RT, foro) antes de formalizar.</p>
+    <div class="proposal-marca">feito no Estelar Orçamentos</div>
+  `;
+
+  document.getElementById('ctEditor').classList.add('hidden');
+  document.getElementById('ctContratoView').classList.remove('hidden');
 }
 
 iniciar();
