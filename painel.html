@@ -81,11 +81,12 @@ input:focus, select:focus { outline: none; border-color: var(--azul); box-shadow
   padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
 }
 .tab {
-  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
-  padding: 6px 2px; cursor: pointer; color: #94a3b8; font-weight: 600; font-size: 10.5px;
-  border-radius: 10px; transition: color .15s;
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 6px 1px; cursor: pointer; color: #94a3b8; font-weight: 600; font-size: 9.5px;
+  border-radius: 10px; transition: color .15s; min-width: 0;
 }
-.tab svg { width: 21px; height: 21px; }
+.tab span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.tab svg { width: 19px; height: 19px; }
 .tab.ativa { color: var(--azul); }
 .tab.ativa svg { filter: drop-shadow(0 2px 6px rgba(37,99,235,.35)); }
 .badge-plano {
@@ -214,7 +215,11 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
   </div>
 
   <div class="tabs">
-    <div class="tab ativa" data-tab="avulso">
+    <div class="tab ativa" data-tab="inicio">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>
+      <span>Início</span>
+    </div>
+    <div class="tab" data-tab="avulso">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/></svg>
       <span>Orçamento</span>
     </div>
@@ -292,7 +297,7 @@ async function iniciar() {
     empresaAtual = empresa;
     document.getElementById("nomeEmpresa").textContent = empresaAtual.nome_empresa;
     document.getElementById("badgePlano").textContent = empresaAtual.plano === "completo" ? "Plano Completo" : "Plano Básico";
-    mostrarAba("avulso");
+    mostrarAba("inicio");
   } catch (e) {
     document.getElementById("conteudo").innerHTML = '<div class="card"><p class="msg erro">Não foi possível carregar: ' + e.message + '</p></div>';
   }
@@ -308,7 +313,8 @@ function mostrarAba(nome) {
   ativarTab(nome);
   const conteudo = document.getElementById("conteudo");
 
-  if (nome === "avulso") { renderAvulso(); }
+  if (nome === "inicio") { renderInicio(); }
+  else if (nome === "avulso") { renderAvulso(); }
   else if (nome === "clientes") { renderClientes(); }
   else if (nome === "agenda") { renderAgenda(); }
   else if (nome === "contrato") {
@@ -352,8 +358,109 @@ async function salvarDadosEmpresa() {
   msgEl.className = "msg ok"; msgEl.textContent = "Salvo!";
 }
 
-/* ===================== CLIENTES ===================== */
+/* ===================== INÍCIO (DASHBOARD) ===================== */
 
+const FINANCEIRO_OCULTO_KEY = 'estelar_financeiro_oculto';
+
+async function renderInicio() {
+  const conteudo = document.getElementById("conteudo");
+  conteudo.innerHTML = '<div class="card"><p class="vazio">Carregando...</p></div>';
+
+  const [{ data: osData }, { data: clientesData }, { data: agendaConcluida }] = await Promise.all([
+    supabaseClient.from('ordens_servico').select('status,valor,pago,data_pagamento').eq('empresa_id', empresaAtual.id),
+    supabaseClient.from('clientes').select('id,nome,intervalo_retorno_dias').eq('empresa_id', empresaAtual.id),
+    supabaseClient.from('agenda').select('cliente_id,data_hora').eq('empresa_id', empresaAtual.id).eq('status', 'concluido').order('data_hora', { ascending: false })
+  ]);
+
+  const os = osData || [];
+  const osAbertas = os.filter(o => o.status === 'aberta').length;
+  const osAndamento = os.filter(o => o.status === 'em_andamento').length;
+  const emExecucao = os.filter(o => o.status !== 'concluida').reduce((s, o) => s + (parseFloat(o.valor) || 0), 0);
+  const aReceber = os.filter(o => o.status === 'concluida' && !o.pago).reduce((s, o) => s + (parseFloat(o.valor) || 0), 0);
+
+  const hoje = new Date();
+  const recebidoMes = os.filter(o => {
+    if (!o.pago || !o.data_pagamento) return false;
+    const d = new Date(o.data_pagamento);
+    return d.getMonth() === hoje.getMonth() && d.getFullYear() === hoje.getFullYear();
+  }).reduce((s, o) => s + (parseFloat(o.valor) || 0), 0);
+
+  const ultimaVisitaPorCliente = {};
+  (agendaConcluida || []).forEach(a => { if (!ultimaVisitaPorCliente[a.cliente_id]) ultimaVisitaPorCliente[a.cliente_id] = a.data_hora; });
+
+  const hojeSemHora = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+  const visitas = (clientesData || [])
+    .filter(c => c.intervalo_retorno_dias && ultimaVisitaPorCliente[c.id])
+    .map(c => {
+      const proxima = new Date(ultimaVisitaPorCliente[c.id]);
+      proxima.setDate(proxima.getDate() + c.intervalo_retorno_dias);
+      const diffDias = Math.round((proxima - hojeSemHora) / 86400000);
+      return { id: c.id, nome: c.nome, diffDias, proxima };
+    })
+    .filter(v => v.diffDias <= 15)
+    .sort((a, b) => a.diffDias - b.diffDias);
+
+  const visitasHtml = visitas.length
+    ? visitas.map(v => {
+        const vencida = v.diffDias < 0;
+        const label = vencida ? `Vencida há ${Math.abs(v.diffDias)} dia(s)` : (v.diffDias === 0 ? 'Hoje' : `Em ${v.diffDias} dias`);
+        return `<div class="lista-item" style="cursor:pointer;" data-ir-cliente="${v.id}">
+          <div class="info">
+            <div class="titulo-item">${esc(v.nome)}</div>
+            <div class="sub-item">Prevista para ${v.proxima.toLocaleDateString('pt-BR')}</div>
+          </div>
+          <span class="status-tag status-${vencida ? 'cancelado' : 'agendado'}">${label}</span>
+        </div>`;
+      }).join('')
+    : '<p class="vazio">Nenhuma visita vencida ou próxima nos próximos 15 dias.</p>';
+
+  const oculto = localStorage.getItem(FINANCEIRO_OCULTO_KEY) === '1';
+  const financeiroConteudo = oculto
+    ? '<p class="vazio">Valores ocultos. Toque no olho para mostrar.</p>'
+    : `
+      <div class="lista-item"><div class="info"><div class="titulo-item">Recebido este mês</div><div class="sub-item">Ordens de serviço pagas</div></div><span style="font-weight:800; color:var(--sucesso); font-family:'Manrope',sans-serif;">${money(recebidoMes)}</span></div>
+      <div class="lista-item"><div class="info"><div class="titulo-item">A receber</div><div class="sub-item">Concluídas, ainda não pagas</div></div><span style="font-weight:800; color:var(--ambar-escuro); font-family:'Manrope',sans-serif;">${money(aReceber)}</span></div>
+      <div class="lista-item"><div class="info"><div class="titulo-item">Em execução</div><div class="sub-item">OS abertas ou em andamento</div></div><span style="font-weight:800; color:var(--cinza-texto); font-family:'Manrope',sans-serif;">${money(emExecucao)}</span></div>
+    `;
+
+  conteudo.innerHTML = `
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="margin:0;">Financeiro</h3>
+        <button class="icon-btn" id="btnOcultarFinanceiro" title="Ocultar/mostrar valores">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${oculto
+            ? '<path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.6 18.6 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'
+            : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'}</svg>
+        </button>
+      </div>
+      <div id="financeiroConteudo" style="margin-top:6px;">${financeiroConteudo}</div>
+    </div>
+
+    <div class="card">
+      <h3>Ordens de serviço</h3>
+      <div class="lista-item"><div class="info"><div class="titulo-item">Abertas</div></div><span style="font-weight:800; font-family:'Manrope',sans-serif;">${osAbertas}</span></div>
+      <div class="lista-item"><div class="info"><div class="titulo-item">Em andamento</div></div><span style="font-weight:800; font-family:'Manrope',sans-serif;">${osAndamento}</span></div>
+    </div>
+
+    <div class="card">
+      <h3>Clientes — visitas vencidas ou próximas</h3>
+      ${visitasHtml}
+    </div>
+  `;
+
+  document.getElementById('btnOcultarFinanceiro').addEventListener('click', () => {
+    const novoEstado = localStorage.getItem(FINANCEIRO_OCULTO_KEY) === '1' ? '0' : '1';
+    localStorage.setItem(FINANCEIRO_OCULTO_KEY, novoEstado);
+    renderInicio();
+  });
+  conteudo.querySelectorAll('[data-ir-cliente]').forEach(el => {
+    el.addEventListener('click', () => irParaFichaCliente(el.getAttribute('data-ir-cliente')));
+  });
+}
+
+/* ===================== INÍCIO (DASHBOARD) FIM ===================== */
+
+/* ===================== CLIENTES ===================== */
 let clientesCache = [];
 
 async function renderClientes() {
@@ -366,6 +473,15 @@ async function renderClientes() {
       <label>E-mail</label><input type="text" id="clEmail" placeholder="cliente@email.com">
       <label>Endereço</label><input type="text" id="clEndereco" placeholder="Rua, número, bairro, cidade">
       <label>Observações</label><input type="text" id="clObs" placeholder="Opcional">
+      <label>Intervalo de retorno (manutenção)</label>
+      <select id="clIntervalo">
+        <option value="">Não controlar</option>
+        <option value="30">A cada 30 dias</option>
+        <option value="60">A cada 60 dias</option>
+        <option value="90">A cada 90 dias</option>
+        <option value="180">A cada 6 meses</option>
+        <option value="365">A cada 12 meses</option>
+      </select>
       <div class="msg" id="clMsg"></div>
       <button class="btn" id="clSalvarBtn">Salvar cliente</button>
     </div>
@@ -453,6 +569,7 @@ async function clVerDetalhes(id) {
     : '<p class="vazio">Nenhum compromisso registrado ainda.</p>';
 
   const osStatusLabel = { aberta: 'Aberta', em_andamento: 'Em andamento', concluida: 'Concluída' };
+  const formaPagamentoLabel = { dinheiro: 'Dinheiro', pix: 'PIX', debito: 'Débito', credito: 'Crédito', transferencia: 'Transferência', boleto: 'Boleto', combinar: 'A combinar' };
   const osHtml = (osItens && osItens.length)
     ? osItens.map(o => `
         <div class="lista-item" style="cursor:pointer;" data-abrir-os="${o.id}">
@@ -460,6 +577,7 @@ async function clVerDetalhes(id) {
             <div class="titulo-item">${esc(o.descricao || 'Ordem de serviço')} · ${money(o.valor || 0)}</div>
             <div class="sub-item">${new Date(o.created_at).toLocaleDateString('pt-BR')}</div>
             <span class="status-tag status-${o.status === 'concluida' ? 'concluido' : 'agendado'}">${osStatusLabel[o.status] || o.status}</span>
+            ${o.pago ? `<span class="status-tag status-concluido" style="margin-left:4px;">Pago · ${formaPagamentoLabel[o.forma_pagamento] || o.forma_pagamento || ''}</span>` : (o.status === 'concluida' ? '<span class="status-tag status-cancelado" style="margin-left:4px;">A receber</span>' : '')}
           </div>
         </div>`).join('')
     : '<p class="vazio">Nenhuma ordem de serviço registrada ainda.</p>';
@@ -470,6 +588,20 @@ async function clVerDetalhes(id) {
       <div class="sub-item">${esc([cliente.telefone, cliente.email].filter(Boolean).join(' · ') || '—')}</div>
       ${cliente.endereco ? `<div class="sub-item">${esc(cliente.endereco)}</div>` : ''}
       ${cliente.observacoes ? `<div class="sub-item" style="margin-top:6px;">${esc(cliente.observacoes)}</div>` : ''}
+    </div>
+    <div class="card">
+      <h3>Controle de visitas</h3>
+      <label>Intervalo de retorno (manutenção)</label>
+      <select id="clIntervaloEdit">
+        <option value="">Não controlar</option>
+        <option value="30">A cada 30 dias</option>
+        <option value="60">A cada 60 dias</option>
+        <option value="90">A cada 90 dias</option>
+        <option value="180">A cada 6 meses</option>
+        <option value="365">A cada 12 meses</option>
+      </select>
+      <div class="msg" id="clIntervaloMsg"></div>
+      <div class="sub-item" id="clProximaVisita" style="margin-top:10px;"></div>
     </div>
     <div class="card">
       <h3>Orçamentos</h3>
@@ -499,6 +631,37 @@ async function clVerDetalhes(id) {
       osAbrirComContexto({ agendaId: osRow.agenda_id || null, orcamentoId: osRow.orcamento_id || null });
     });
   });
+
+  const selIntervalo = document.getElementById('clIntervaloEdit');
+  selIntervalo.value = cliente.intervalo_retorno_dias ? String(cliente.intervalo_retorno_dias) : '';
+  clAtualizarProximaVisita(cliente, agendaItens);
+  selIntervalo.addEventListener('change', async () => {
+    const msgEl = document.getElementById('clIntervaloMsg');
+    const novoValor = selIntervalo.value ? parseInt(selIntervalo.value) : null;
+    const { error } = await supabaseClient.from('clientes').update({ intervalo_retorno_dias: novoValor }).eq('id', id);
+    if (error) { msgEl.className = 'msg erro'; msgEl.textContent = 'Erro ao salvar.'; return; }
+    cliente.intervalo_retorno_dias = novoValor;
+    const idxCache = clientesCache.findIndex(c => c.id === id);
+    if (idxCache >= 0) clientesCache[idxCache].intervalo_retorno_dias = novoValor;
+    msgEl.className = 'msg ok'; msgEl.textContent = 'Salvo!';
+    clAtualizarProximaVisita(cliente, agendaItens);
+  });
+}
+
+function clAtualizarProximaVisita(cliente, agendaItens) {
+  const el = document.getElementById('clProximaVisita');
+  if (!cliente.intervalo_retorno_dias) { el.textContent = ''; return; }
+  const concluidas = (agendaItens || []).filter(a => a.status === 'concluido');
+  if (!concluidas.length) { el.textContent = 'Ainda sem visita concluída registrada — a contagem começa após a primeira.'; return; }
+  const ultima = new Date(concluidas[0].data_hora);
+  const proxima = new Date(ultima);
+  proxima.setDate(proxima.getDate() + cliente.intervalo_retorno_dias);
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const diffDias = Math.round((proxima - hoje) / 86400000);
+  const dataFmt = proxima.toLocaleDateString('pt-BR');
+  if (diffDias < 0) el.innerHTML = `<span class="status-tag status-cancelado">Vencida há ${Math.abs(diffDias)} dia(s)</span> próxima visita prevista: ${dataFmt}`;
+  else if (diffDias === 0) el.innerHTML = `<span class="status-tag status-agendado">Hoje</span> próxima visita prevista: ${dataFmt}`;
+  else el.innerHTML = `Última visita: ${ultima.toLocaleDateString('pt-BR')} · próxima prevista: ${dataFmt} (em ${diffDias} dias)`;
 }
 
 async function clVerOrcamento(orcamentoId, clienteId) {
@@ -562,10 +725,12 @@ async function clSalvarNovo() {
     telefone: document.getElementById('clTelefone').value.trim(),
     email: document.getElementById('clEmail').value.trim(),
     endereco: document.getElementById('clEndereco').value.trim(),
-    observacoes: document.getElementById('clObs').value.trim()
+    observacoes: document.getElementById('clObs').value.trim(),
+    intervalo_retorno_dias: document.getElementById('clIntervalo').value ? parseInt(document.getElementById('clIntervalo').value) : null
   });
   if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar cliente.'; return; }
   ['clNome','clTelefone','clEmail','clEndereco','clObs'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('clIntervalo').value = '';
   msg.className = 'msg ok'; msg.textContent = 'Cliente salvo!';
   await clCarregarLista();
 }
@@ -885,6 +1050,19 @@ async function agRenderOS(card) {
     ${valorPreenchidoAutomaticamente ? '<div class="note">Valor trazido do orçamento original. Edite se necessário.</div>' : ''}
     <label>Observações internas</label>
     <input type="text" id="osObs" value="${esc(osExistente ? (osExistente.observacoes || '') : '')}" placeholder="Opcional">
+    <div class="checkbox-row"><input type="checkbox" id="osPago" ${osExistente && osExistente.pago ? 'checked' : ''}><label>Serviço pago</label></div>
+    <div id="osFormaPagamentoWrap" class="${osExistente && osExistente.pago ? '' : 'hidden'}">
+      <label>Forma de pagamento</label>
+      <select id="osFormaPagamento">
+        <option value="dinheiro" ${osExistente && osExistente.forma_pagamento === 'dinheiro' ? 'selected' : ''}>Dinheiro</option>
+        <option value="pix" ${!osExistente || !osExistente.forma_pagamento || osExistente.forma_pagamento === 'pix' ? 'selected' : ''}>PIX</option>
+        <option value="debito" ${osExistente && osExistente.forma_pagamento === 'debito' ? 'selected' : ''}>Cartão de débito</option>
+        <option value="credito" ${osExistente && osExistente.forma_pagamento === 'credito' ? 'selected' : ''}>Cartão de crédito</option>
+        <option value="transferencia" ${osExistente && osExistente.forma_pagamento === 'transferencia' ? 'selected' : ''}>Transferência</option>
+        <option value="boleto" ${osExistente && osExistente.forma_pagamento === 'boleto' ? 'selected' : ''}>Boleto</option>
+        <option value="combinar" ${osExistente && osExistente.forma_pagamento === 'combinar' ? 'selected' : ''}>A combinar</option>
+      </select>
+    </div>
   `;
 
   function osLerItemAtual() {
@@ -941,6 +1119,9 @@ async function agRenderOS(card) {
     document.getElementById(id).addEventListener('input', osRecalcular);
   });
   document.getElementById('osValor').addEventListener('input', (e) => { e.target.dataset.editadoManualmente = '1'; });
+  document.getElementById('osPago').addEventListener('change', (e) => {
+    document.getElementById('osFormaPagamentoWrap').classList.toggle('hidden', !e.target.checked);
+  });
   osRecalcular();
 }
 
@@ -952,6 +1133,17 @@ async function voltarDoOS() {
 
 async function osSalvar(osId) {
   const msg = document.getElementById('osMsg');
+  const pago = document.getElementById('osPago').checked;
+  const formaPagamento = pago ? document.getElementById('osFormaPagamento').value : null;
+  let dataPagamento = null;
+  if (pago) {
+    if (osId) {
+      const { data: atual } = await supabaseClient.from('ordens_servico').select('pago,data_pagamento').eq('id', osId).single();
+      dataPagamento = (atual && atual.pago && atual.data_pagamento) ? atual.data_pagamento : new Date().toISOString();
+    } else {
+      dataPagamento = new Date().toISOString();
+    }
+  }
   const dados = {
     tipo: document.getElementById('osTipo').value,
     porte: document.getElementById('osPorte').value,
@@ -974,7 +1166,10 @@ async function osSalvar(osId) {
     dados,
     valor: parseFloat(document.getElementById('osValor').value) || 0,
     observacoes: document.getElementById('osObs').value.trim(),
-    status: document.getElementById('osStatus') ? document.getElementById('osStatus').value : 'aberta'
+    status: document.getElementById('osStatus') ? document.getElementById('osStatus').value : 'aberta',
+    pago,
+    forma_pagamento: formaPagamento,
+    data_pagamento: dataPagamento
   };
   let error;
   if (osId) { ({ error } = await supabaseClient.from('ordens_servico').update(payload).eq('id', osId)); }
