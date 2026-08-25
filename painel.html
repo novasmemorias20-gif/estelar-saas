@@ -659,10 +659,11 @@ async function clVerDetalhes(id) {
   const conteudo = document.getElementById("conteudo");
   conteudo.innerHTML = `<div class="card"><p class="vazio">Carregando...</p></div>`;
 
-  const [{ data: orcamentos }, { data: agendaItens }, { data: osItens }] = await Promise.all([
+  const [{ data: orcamentos }, { data: agendaItens }, { data: osItens }, { data: contratosItens }] = await Promise.all([
     supabaseClient.from('orcamentos').select('*').eq('cliente_id', id).order('created_at', { ascending: false }),
     supabaseClient.from('agenda').select('*').eq('cliente_id', id).order('data_hora', { ascending: false }),
-    supabaseClient.from('ordens_servico').select('*').eq('cliente_id', id).order('created_at', { ascending: false })
+    supabaseClient.from('ordens_servico').select('*').eq('cliente_id', id).order('created_at', { ascending: false }),
+    supabaseClient.from('contratos').select('*').eq('cliente_id', id).order('created_at', { ascending: false })
   ]);
 
   const orcamentosHtml = (orcamentos && orcamentos.length)
@@ -700,6 +701,18 @@ async function clVerDetalhes(id) {
         </div>`).join('')
     : '<p class="vazio">Nenhuma ordem de serviço registrada ainda.</p>';
 
+  const ctStatusLabel = { rascunho: 'Rascunho', ativo: 'Ativo', expirado: 'Expirado', cancelado: 'Cancelado' };
+  const contratosHtml = (contratosItens && contratosItens.length)
+    ? contratosItens.map(c => `
+        <div class="lista-item">
+          <div class="info">
+            <div class="titulo-item">Contrato de manutenção · ${money(c.valor_visita || 0)}/visita</div>
+            <div class="sub-item">${new Date(c.created_at).toLocaleDateString('pt-BR')} · ${ctStatusLabel[c.status] || c.status}</div>
+          </div>
+          <div class="acoes"><button class="icon-btn perigo" data-del-contrato="${c.id}">✕</button></div>
+        </div>`).join('')
+    : '<p class="vazio">Nenhum contrato registrado ainda.</p>';
+
   conteudo.innerHTML = `
     <div class="card">
       <h3>${esc(cliente.nome)}</h3>
@@ -730,6 +743,10 @@ async function clVerDetalhes(id) {
       ${osHtml}
     </div>
     <div class="card">
+      <h3>Contratos</h3>
+      ${contratosHtml}
+    </div>
+    <div class="card">
       <h3>Agenda</h3>
       ${agendaHtml}
     </div>
@@ -744,6 +761,9 @@ async function clVerDetalhes(id) {
   });
   conteudo.querySelectorAll('[data-abrir-os]').forEach(el => {
     el.addEventListener('click', () => osAbrirComContexto({ osId: el.getAttribute('data-abrir-os') }));
+  });
+  conteudo.querySelectorAll('[data-del-contrato]').forEach(el => {
+    el.addEventListener('click', () => ctExcluirContrato(el.getAttribute('data-del-contrato'), id));
   });
 
   const selIntervalo = document.getElementById('clIntervaloEdit');
@@ -760,6 +780,13 @@ async function clVerDetalhes(id) {
     msgEl.className = 'msg ok'; msgEl.textContent = 'Salvo!';
     clAtualizarProximaVisita(cliente, agendaItens);
   });
+}
+
+async function ctExcluirContrato(contratoId, clienteId) {
+  if (!confirm('Excluir este contrato? Essa ação não pode ser desfeita.')) return;
+  const { error } = await supabaseClient.from('contratos').delete().eq('id', contratoId);
+  if (error) { alert('Erro ao excluir contrato.'); return; }
+  await clVerDetalhes(clienteId);
 }
 
 function clAtualizarProximaVisita(cliente, agendaItens) {
@@ -800,10 +827,20 @@ async function clVerOrcamento(orcamentoId, clienteId) {
     </div>
     <div class="card"><h3>Itens</h3>${itensHtml}</div>
     <button class="btn btn-ambar" id="orcCriarOSBtn">Transformar em Ordem de Serviço</button>
+    <button class="btn btn-secundario" id="orcExcluirBtn" style="color:var(--erro); border-color:var(--erro);">Excluir este orçamento</button>
     <div class="voltar-link" id="orcVoltarBtn">← Voltar para o cliente</div>
   `;
   document.getElementById('orcVoltarBtn').addEventListener('click', () => clVerDetalhes(clienteId));
   document.getElementById('orcCriarOSBtn').addEventListener('click', () => osAbrirComContexto({ agendaId: null, orcamentoId }));
+  document.getElementById('orcExcluirBtn').addEventListener('click', () => orcExcluir(orcamentoId, clienteId));
+}
+
+async function orcExcluir(orcamentoId, clienteId) {
+  if (!confirm('Excluir este orçamento? Se houver uma Ordem de Serviço vinculada a ele, ela deixará de estar associada a este orçamento, mas não será apagada. Essa ação não pode ser desfeita.')) return;
+  await supabaseClient.from('ordens_servico').update({ orcamento_id: null }).eq('orcamento_id', orcamentoId);
+  const { error } = await supabaseClient.from('orcamentos').delete().eq('id', orcamentoId);
+  if (error) { alert('Erro ao excluir orçamento.'); return; }
+  await clVerDetalhes(clienteId);
 }
 
 async function irParaFichaCliente(clienteId) {
@@ -850,8 +887,13 @@ async function clSalvarNovo() {
 }
 
 async function clExcluir(id) {
-  if (!confirm('Remover este cliente?')) return;
-  await supabaseClient.from('clientes').delete().eq('id', id);
+  if (!confirm('Excluir este cliente? Isso também apaga os orçamentos, agendamentos, ordens de serviço e contratos vinculados a ele. Essa ação não pode ser desfeita.')) return;
+  await supabaseClient.from('ordens_servico').delete().eq('cliente_id', id);
+  await supabaseClient.from('agenda').delete().eq('cliente_id', id);
+  await supabaseClient.from('orcamentos').delete().eq('cliente_id', id);
+  await supabaseClient.from('contratos').delete().eq('cliente_id', id);
+  const { error } = await supabaseClient.from('clientes').delete().eq('id', id);
+  if (error) { alert('Erro ao excluir cliente.'); return; }
   await clCarregarLista();
 }
 
@@ -1007,10 +1049,12 @@ async function agRenderCompromisso(card) {
     <div class="msg" id="cpMsg"></div>
     <button class="btn" id="cpSalvarBtn">Salvar alterações</button>
     <button class="btn btn-secundario" id="cpAbrirOSBtn">Ver / criar Ordem de Serviço</button>
+    <button class="btn btn-secundario" id="cpExcluirBtn" style="color:var(--erro); border-color:var(--erro);">Excluir este compromisso</button>
   `;
   document.getElementById('cpVoltarBtn').addEventListener('click', () => { agModo = 'dia'; agAtualizarDinamico(); });
   document.getElementById('cpSalvarBtn').addEventListener('click', cpSalvar);
   document.getElementById('cpAbrirOSBtn').addEventListener('click', () => osAbrirComContexto({ agendaId: agAgendaSelecionadaId, orcamentoId: null }));
+  document.getElementById('cpExcluirBtn').addEventListener('click', cpExcluir);
   if (ag.cliente_id) document.getElementById('cpVerClienteBtn').addEventListener('click', () => irParaFichaCliente(ag.cliente_id));
 }
 
@@ -1027,6 +1071,16 @@ async function cpSalvar() {
   }).eq('id', agAgendaSelecionadaId);
   if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar.'; return; }
   msg.className = 'msg ok'; msg.textContent = 'Salvo!';
+}
+
+async function cpExcluir() {
+  if (!confirm('Excluir este compromisso? Se houver uma Ordem de Serviço vinculada, ela deixará de estar associada a um agendamento, mas não será apagada. Essa ação não pode ser desfeita.')) return;
+  const msg = document.getElementById('cpMsg');
+  await supabaseClient.from('ordens_servico').update({ agenda_id: null }).eq('agenda_id', agAgendaSelecionadaId);
+  const { error } = await supabaseClient.from('agenda').delete().eq('id', agAgendaSelecionadaId);
+  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao excluir.'; return; }
+  agModo = 'dia';
+  agAtualizarDinamico();
 }
 
 async function agRenderCalendario(card) {
