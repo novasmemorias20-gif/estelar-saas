@@ -269,7 +269,7 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
     <div class="card"><p id="statusCarregando">Carregando seus dados...</p></div>
   </div>
 
-  <p class="marca-dagua">feito no Estelar Orçamentos</p>
+  <p class="marca-dagua">feito no Cosmos Pro</p>
 </div>
 
 <script>
@@ -1399,7 +1399,7 @@ async function osSalvar(osId) {
     error = erroInsercao;
     if (data) novoId = data.id;
   }
-  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar OS.'; return; }
+  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar OS: ' + (error.message || 'erro desconhecido'); console.error('Erro ao salvar OS:', error); return; }
 
   // Toda OS precisa de um compromisso vinculado. Se essa OS não veio de um agendamento existente, cria um automaticamente.
   if (!osId && !osContexto.agendaId && osContexto.clienteId) {
@@ -1520,7 +1520,7 @@ function renderAvulso() {
         <div class="proposal-total-desconto hidden" id="avProposalTotalDesconto"><span class="lbl">À vista (com desconto)</span><span class="val" id="avProposalTotalComDesconto">R$ 0,00</span></div>
         <div class="proposal-condicoes" id="avProposalCondicoes"></div>
         <div class="proposal-footer" id="avProposalFooter"></div>
-        <div class="proposal-marca">feito no Estelar Orçamentos</div>
+        <div class="proposal-marca">feito no Cosmos Pro</div>
       </div>
       <div class="action-row">
         <button class="btn btn-secundario" id="avPrintBtn">Salvar / imprimir PDF</button>
@@ -1771,7 +1771,7 @@ function avBuildStandaloneHTML(d) {
   ${d.temDesconto ? `<div class="proposal-total-desconto"><span class="lbl">À vista</span><span class="val">${d.totalComDescontoFormatado}</span></div>` : ''}
   <div class="proposal-condicoes">${d.condicoesHtml}</div>
   <div class="proposal-footer">${d.footerText}<br>${d.empresaHtml}</div>
-  <div class="proposal-marca">feito no Estelar Orçamentos</div>
+  <div class="proposal-marca">feito no Cosmos Pro</div>
   </div><button class="print-btn no-print" onclick="window.print()">Salvar / imprimir PDF</button></div></body></html>`;
 }
 
@@ -2088,7 +2088,7 @@ function renderContrato() {
         <div class="proposal-items" id="ctPropostaItems"></div>
         <div class="proposal-total"><span class="lbl">Valor por visita</span><span class="val" id="ctPropostaTotal">R$ 0,00</span></div>
         <div class="proposal-condicoes" id="ctPropostaCondicoes"></div>
-        <div class="proposal-marca">feito no Estelar Orçamentos</div>
+        <div class="proposal-marca">feito no Cosmos Pro</div>
       </div>
       <div class="action-row">
         <button class="btn btn-secundario" id="ctPrintBtn">Salvar / imprimir PDF</button>
@@ -2413,7 +2413,7 @@ function ctMontarContrato() {
     </table>
     <p style="margin-top:12px; font-size:12.5px;"><b>Frequência:</b> ${visitas}x/ano · <b>Deslocamento:</b> ${km} km · <b>Valor/visita:</b> ${money(totalVisita)} · <b>Valor anual estimado:</b> ${money(totalAnual)}</p>
     <p style="font-size:11px; color:var(--cinza-texto); margin-top:16px;">Minuta gerada automaticamente a partir do orçamento. Revise dados cadastrais (CNPJ, RT, foro) antes de formalizar.</p>
-    <div class="proposal-marca">feito no Estelar Orçamentos</div>
+    <div class="proposal-marca">feito no Cosmos Pro</div>
   `;
 
   document.getElementById('ctEditor').classList.add('hidden');
