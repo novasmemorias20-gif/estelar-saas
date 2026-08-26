@@ -584,7 +584,8 @@ let clientesCache = [];
 async function renderClientes() {
   const conteudo = document.getElementById("conteudo");
   conteudo.innerHTML = `
-    <div class="card">
+    <button class="btn" id="clAbrirFormBtn">+ Novo cliente</button>
+    <div class="card hidden" id="clFormCard">
       <h3>Novo cliente</h3>
       <label>Nome</label><input type="text" id="clNome" placeholder="Nome do cliente">
       <label>Telefone</label><input type="text" id="clTelefone" placeholder="(18) 99999-9999">
@@ -609,6 +610,11 @@ async function renderClientes() {
       <div id="clLista" style="margin-top:12px;"><p class="vazio">Carregando...</p></div>
     </div>
   `;
+  document.getElementById("clAbrirFormBtn").addEventListener("click", () => {
+    document.getElementById("clFormCard").classList.remove("hidden");
+    document.getElementById("clAbrirFormBtn").classList.add("hidden");
+    document.getElementById("clNome").focus();
+  });
   document.getElementById("clSalvarBtn").addEventListener("click", clSalvarNovo);
   document.getElementById("clBusca").addEventListener("input", (e) => clRenderLista(e.target.value.trim().toLowerCase()));
   await clCarregarLista();
@@ -914,7 +920,17 @@ async function renderAgenda() {
   const opcoesClientes = (clientes || []).map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('');
 
   conteudo.innerHTML = `
-    <div class="card">
+    <div class="atalhos-row">
+      <button class="atalho-btn atalho-primario" id="agAbrirFormBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span>Novo compromisso</span>
+      </button>
+      <button class="atalho-btn atalho-secundario" id="agAbrirNovaOSBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONE_OS}</svg>
+        <span>Nova OS</span>
+      </button>
+    </div>
+    <div class="card hidden" id="agFormCard">
       <h3>Novo compromisso</h3>
       <label>Título</label><input type="text" id="agTitulo" placeholder="Ex: Visita técnica, instalação...">
       <label>Tipo</label>
@@ -934,6 +950,11 @@ async function renderAgenda() {
     <button class="btn btn-secundario" id="agVerKanbanBtn">📋 Ver ordens de serviço por status</button>
     <div class="card" id="agDinamicoCard"><p class="vazio">Carregando...</p></div>
   `;
+  document.getElementById("agAbrirFormBtn").addEventListener("click", () => {
+    document.getElementById("agFormCard").classList.remove("hidden");
+    document.getElementById("agTitulo").focus();
+  });
+  document.getElementById("agAbrirNovaOSBtn").addEventListener("click", irParaNovaOS);
   document.getElementById("agSalvarBtn").addEventListener("click", agSalvarNovo);
   document.getElementById("agVerKanbanBtn").addEventListener("click", () => { agModo = 'kanban'; agAtualizarDinamico(); });
   await agAtualizarDinamico();
@@ -1001,7 +1022,7 @@ async function agRenderKanban(card) {
     .eq('empresa_id', empresaAtual.id)
     .order('created_at', { ascending: false });
 
-  if (error) { card.innerHTML = '<div class="voltar-link" id="kbVoltarBtn" style="margin-top:0; text-align:left;">← Voltar ao calendário</div><p class="msg erro">Erro ao carregar ordens de serviço.</p>'; document.getElementById('kbVoltarBtn').addEventListener('click', () => { agModo = 'calendario'; agAtualizarDinamico(); }); return; }
+  if (error) { card.innerHTML = '<button class="btn btn-secundario" id="kbVoltarBtn">← Voltar ao calendário</button><p class="msg erro">Erro ao carregar ordens de serviço.</p>'; document.getElementById('kbVoltarBtn').addEventListener('click', () => { agModo = 'calendario'; agAtualizarDinamico(); }); return; }
 
   const os = data || [];
   const html = osKanbanSecaoHtml('Aberta', 'agendado', os.filter(o => o.status === 'aberta'))
@@ -1009,7 +1030,7 @@ async function agRenderKanban(card) {
     + osKanbanSecaoHtml('Concluída', 'concluido', os.filter(o => o.status === 'concluida'));
 
   card.innerHTML = `
-    <div class="voltar-link" id="kbVoltarBtn" style="margin-top:0; margin-bottom:12px; text-align:left;">← Voltar ao calendário</div>
+    <button class="btn btn-secundario" id="kbVoltarBtn" style="margin-top:0; margin-bottom:16px;">← Voltar ao calendário</button>
     <h3 style="font-size:16px;">Ordens de serviço por status</h3>
     ${html}
   `;
