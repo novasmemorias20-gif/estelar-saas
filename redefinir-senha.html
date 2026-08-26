@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="theme-color" content="#2563eb">
+<title>Redefinir senha</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root {
+  --azul: #2563eb;
+  --azul-escuro: #1d4ed8;
+  --ciano: #06b6d4;
+  --gradiente: linear-gradient(135deg, var(--azul), var(--ciano));
+  --escuro: #0f172a;
+  --cinza-texto: #64748b;
+  --cinza-linha: #e2e8f0;
+  --erro: #ef4444;
+  --sucesso: #16a34a;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body {
+  margin: 0; min-height: 100vh;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--gradiente); color: var(--escuro);
+}
+.container { max-width: 420px; margin: 0 auto; padding: 64px 20px 40px; min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; }
+.card { background: #fff; border-radius: 20px; padding: 26px 22px; box-shadow: 0 24px 60px rgba(15,23,42,.28); }
+h1 { margin: 0 0 4px; font-family: "Manrope", sans-serif; font-weight: 800; font-size: 21px; }
+p.sub { font-size: 13px; color: var(--cinza-texto); margin-top: 0; }
+label { display: block; font-size: 12.5px; font-weight: 600; margin: 14px 0 5px; color: var(--cinza-texto); }
+input {
+  width: 100%; padding: 12px 13px; border: 1.5px solid var(--cinza-linha); border-radius: 10px;
+  font-size: 16px; color: var(--escuro); background: #fff; font-family: inherit;
+}
+input:focus { outline: none; border-color: var(--azul); box-shadow: 0 0 0 3px #eff6ff; }
+.btn {
+  display: block; width: 100%; padding: 13px 16px; border-radius: 12px; border: none;
+  background: var(--gradiente); color: #fff; font-size: 15px; font-weight: 700;
+  cursor: pointer; margin-top: 18px; text-align: center; box-shadow: 0 6px 18px rgba(37,99,235,.3);
+}
+.msg { font-size: 13.5px; margin-top: 10px; min-height: 18px; font-weight: 500; }
+.msg.erro { color: var(--erro); }
+.msg.ok { color: var(--sucesso); }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="card">
+    <h1>Criar nova senha</h1>
+    <p class="sub">Escolha uma nova senha para sua conta.</p>
+    <label for="novaSenha">Nova senha</label>
+    <input type="password" id="novaSenha" placeholder="Mínimo 6 caracteres">
+    <label for="confirmarSenha">Confirmar nova senha</label>
+    <input type="password" id="confirmarSenha" placeholder="Digite de novo">
+    <div class="msg" id="msgStatus"></div>
+    <button class="btn" id="btnSalvar">Salvar nova senha</button>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = "https://lkankciqsldutuncuvyl.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_QAzF6HlUkYoAumTQCzKuVg_FEmhtwQ8";
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const msg = document.getElementById("msgStatus");
+function mostrarMsg(texto, tipo) { msg.textContent = texto; msg.className = "msg " + (tipo || ""); }
+
+(async () => {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) {
+    mostrarMsg("Link inválido ou expirado. Solicite a recuperação de senha novamente na tela de login.", "erro");
+    document.getElementById("btnSalvar").disabled = true;
+  }
+})();
+
+document.getElementById("btnSalvar").addEventListener("click", async () => {
+  const novaSenha = document.getElementById("novaSenha").value;
+  const confirmar = document.getElementById("confirmarSenha").value;
+
+  if (novaSenha.length < 6) { mostrarMsg("A senha precisa ter pelo menos 6 caracteres.", "erro"); return; }
+  if (novaSenha !== confirmar) { mostrarMsg("As senhas não coincidem.", "erro"); return; }
+
+  mostrarMsg("Salvando...", "");
+  const { error } = await supabaseClient.auth.updateUser({ password: novaSenha });
+  if (error) { mostrarMsg("Erro ao salvar: " + error.message, "erro"); return; }
+
+  mostrarMsg("Senha alterada! Redirecionando...", "ok");
+  setTimeout(() => { window.location.href = "painel.html"; }, 1500);
+});
+</script>
+</body>
+</html>
