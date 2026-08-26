@@ -359,8 +359,42 @@ function mostrarAba(nome) {
       <label>Telefone comercial</label><input type="text" id="cfgTelefone" placeholder="(18) 99169-0009" value="${esc(emp.telefone || '')}">
       <label>E-mail comercial</label><input type="text" id="cfgEmail" placeholder="contato@empresa.com" value="${esc(emp.email || '')}">
       <button class="btn" onclick="salvarDadosEmpresa()">Salvar</button>
-      <div class="msg" id="msgConfig"></div></div>`;
+      <div class="msg" id="msgConfig"></div></div>
+      <div class="card" id="cardConta">
+        <h3>Conta e login</h3>
+        <p class="note" style="margin-top:-6px;">Vincule sua conta Google pra também poder entrar com ela, além do e-mail e senha.</p>
+        <div id="statusVinculoGoogle" class="sub-item">Verificando...</div>
+        <button class="btn btn-secundario" id="btnVincularGoogle">Vincular conta Google</button>
+        <div class="msg" id="msgVinculoGoogle"></div>
+      </div>`;
+    carregarStatusGoogle();
+    document.getElementById('btnVincularGoogle').addEventListener('click', vincularGoogle);
   }
+}
+
+async function carregarStatusGoogle() {
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  const jaVinculado = !!(user && user.identities && user.identities.some(i => i.provider === 'google'));
+  const statusEl = document.getElementById('statusVinculoGoogle');
+  const btnEl = document.getElementById('btnVincularGoogle');
+  if (!statusEl || !btnEl) return;
+  if (jaVinculado) {
+    statusEl.innerHTML = '<span class="status-tag status-concluido">Conta Google já vinculada</span>';
+    btnEl.classList.add('hidden');
+  } else {
+    statusEl.textContent = 'Nenhuma conta Google vinculada ainda.';
+    btnEl.classList.remove('hidden');
+  }
+}
+
+async function vincularGoogle() {
+  const msg = document.getElementById('msgVinculoGoogle');
+  msg.className = 'msg'; msg.textContent = 'Redirecionando para o Google...';
+  const { error } = await supabaseClient.auth.linkIdentity({
+    provider: 'google',
+    options: { redirectTo: window.location.origin + '/painel.html' }
+  });
+  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao vincular: ' + error.message; }
 }
 
 async function salvarDadosEmpresa() {
