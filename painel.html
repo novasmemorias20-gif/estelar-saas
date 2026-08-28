@@ -594,19 +594,56 @@ async function agRenderNovaOS(card) {
   card.innerHTML = `
     <div class="voltar-link" id="novaOsVoltarBtn" style="margin-top:0;margin-bottom:10px;text-align:left;">← Voltar ao calendário</div>
     <h3 style="font-size:15px;">Nova ordem de serviço</h3>
-    <p class="note" style="margin-top:-4px;">Escolha o cliente pra começar. Você preenche os detalhes do serviço na próxima tela.</p>
+    <p class="note" style="margin-top:-4px;">Toda OS parte de um orçamento ou contrato já salvo do cliente. Escolha o cliente pra ver as opções.</p>
     <label>Cliente</label>
     <select id="novaOsCliente"><option value="">— selecionar cliente —</option>${opcoes}</select>
-    <div class="msg erro" id="novaOsMsg"></div>
-    <button class="btn" id="novaOsContinuarBtn">Continuar</button>
+    <div id="novaOsOrigens"></div>
   `;
   document.getElementById('novaOsVoltarBtn').addEventListener('click', () => { agModo = 'calendario'; agAtualizarDinamico(); });
-  document.getElementById('novaOsContinuarBtn').addEventListener('click', () => {
-    const cid = document.getElementById('novaOsCliente').value;
-    if (!cid) { document.getElementById('novaOsMsg').textContent = 'Selecione um cliente pra continuar.'; return; }
-    osContexto = { agendaId: null, orcamentoId: null, clienteId: cid };
-    agModo = 'os';
-    agAtualizarDinamico();
+  document.getElementById('novaOsCliente').addEventListener('change', novaOsCarregarOrigens);
+}
+
+async function novaOsCarregarOrigens() {
+  const cid = document.getElementById('novaOsCliente').value;
+  const container = document.getElementById('novaOsOrigens');
+  if (!cid) { container.innerHTML = ''; return; }
+  container.innerHTML = '<p class="vazio">Carregando orçamentos e contratos...</p>';
+
+  const [{ data: orcamentos }, { data: contratos }] = await Promise.all([
+    supabaseClient.from('orcamentos').select('id,dados,valor_total,created_at').eq('cliente_id', cid).order('created_at', { ascending: false }),
+    supabaseClient.from('contratos').select('id,valor_visita,created_at,status').eq('cliente_id', cid).order('created_at', { ascending: false })
+  ]);
+
+  const itensOrcamento = (orcamentos || []).map(o => `
+    <div class="lista-item" style="cursor:pointer;" data-nova-os-orcamento="${o.id}">
+      <div class="info">
+        <div class="titulo-item">${esc((o.dados && o.dados.numero) || 'Orçamento')} · ${money(o.valor_total || 0)}</div>
+        <div class="sub-item">${new Date(o.created_at).toLocaleDateString('pt-BR')} · Orçamento avulso</div>
+      </div>
+    </div>`).join('');
+
+  const itensContrato = (contratos || []).map(c => `
+    <div class="lista-item" style="cursor:pointer;" data-nova-os-contrato="${c.id}">
+      <div class="info">
+        <div class="titulo-item">Contrato de manutenção · ${money(c.valor_visita || 0)}/visita</div>
+        <div class="sub-item">${new Date(c.created_at).toLocaleDateString('pt-BR')}</div>
+      </div>
+    </div>`).join('');
+
+  if (!itensOrcamento && !itensContrato) {
+    container.innerHTML = `<p class="vazio">Este cliente ainda não tem orçamento ou contrato salvo. Crie um na aba Orçamento ou Contrato primeiro, vinculado a ele.</p>`;
+    return;
+  }
+
+  container.innerHTML = `
+    ${itensOrcamento ? `<label style="margin-top:16px;">Orçamentos salvos</label>${itensOrcamento}` : ''}
+    ${itensContrato ? `<label style="margin-top:16px;">Contratos salvos</label>${itensContrato}` : ''}
+  `;
+  container.querySelectorAll('[data-nova-os-orcamento]').forEach(el => {
+    el.addEventListener('click', () => osAbrirComContexto({ orcamentoId: el.getAttribute('data-nova-os-orcamento') }));
+  });
+  container.querySelectorAll('[data-nova-os-contrato]').forEach(el => {
+    el.addEventListener('click', () => osAbrirComContexto({ contratoId: el.getAttribute('data-nova-os-contrato') }));
   });
 }
 
@@ -754,11 +791,16 @@ async function clVerDetalhes(id) {
     : '<p class="vazio">Nenhum contrato registrado ainda.</p>';
 
   conteudo.innerHTML = `
-    <div class="card">
-      <h3>${esc(cliente.nome)}</h3>
-      <div class="sub-item">${esc([cliente.telefone, cliente.email].filter(Boolean).join(' · ') || '—')}</div>
-      ${cliente.endereco ? `<div class="sub-item">${esc(cliente.endereco)}</div>` : ''}
-      ${cliente.observacoes ? `<div class="sub-item" style="margin-top:6px;">${esc(cliente.observacoes)}</div>` : ''}
+    <div class="card" id="clDadosCard">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+        <div style="flex:1;">
+          <h3>${esc(cliente.nome)}</h3>
+          <div class="sub-item">${esc([cliente.telefone, cliente.email].filter(Boolean).join(' · ') || '—')}</div>
+          ${cliente.endereco ? `<div class="sub-item">${esc(cliente.endereco)}</div>` : ''}
+          ${cliente.observacoes ? `<div class="sub-item" style="margin-top:6px;">${esc(cliente.observacoes)}</div>` : ''}
+        </div>
+        <button class="icon-btn" id="clEditarBtn" title="Editar dados">✎</button>
+      </div>
     </div>
     <div class="card">
       <h3>Controle de visitas</h3>
@@ -793,6 +835,7 @@ async function clVerDetalhes(id) {
     <div class="voltar-link" id="clVoltarBtn">← Voltar para a lista de clientes</div>
   `;
   document.getElementById('clVoltarBtn').addEventListener('click', renderClientes);
+  document.getElementById('clEditarBtn').addEventListener('click', () => clMostrarEdicao(cliente));
   conteudo.querySelectorAll('[data-ver-orcamento]').forEach(el => {
     el.addEventListener('click', () => clVerOrcamento(el.getAttribute('data-ver-orcamento'), id));
   });
@@ -820,6 +863,42 @@ async function clVerDetalhes(id) {
     msgEl.className = 'msg ok'; msgEl.textContent = 'Salvo!';
     clAtualizarProximaVisita(cliente, agendaItens);
   });
+}
+
+function clMostrarEdicao(cliente) {
+  const card = document.getElementById('clDadosCard');
+  card.innerHTML = `
+    <h3>Editar cliente</h3>
+    <label>Nome</label><input type="text" id="clEditNome" value="${esc(cliente.nome)}">
+    <label>Telefone</label><input type="text" id="clEditTelefone" value="${esc(cliente.telefone || '')}">
+    <label>E-mail</label><input type="text" id="clEditEmail" value="${esc(cliente.email || '')}">
+    <label>Endereço</label><input type="text" id="clEditEndereco" value="${esc(cliente.endereco || '')}">
+    <label>Observações</label><input type="text" id="clEditObs" value="${esc(cliente.observacoes || '')}">
+    <div class="msg" id="clEditMsg"></div>
+    <div class="action-row">
+      <button class="btn" id="clEditSalvarBtn">Salvar</button>
+      <button class="btn btn-secundario" id="clEditCancelarBtn">Cancelar</button>
+    </div>
+  `;
+  document.getElementById('clEditSalvarBtn').addEventListener('click', () => clSalvarEdicao(cliente.id));
+  document.getElementById('clEditCancelarBtn').addEventListener('click', () => clVerDetalhes(cliente.id));
+}
+
+async function clSalvarEdicao(id) {
+  const msg = document.getElementById('clEditMsg');
+  const nome = document.getElementById('clEditNome').value.trim();
+  if (!nome) { msg.className = 'msg erro'; msg.textContent = 'O nome não pode ficar vazio.'; return; }
+  const { error } = await supabaseClient.from('clientes').update({
+    nome,
+    telefone: document.getElementById('clEditTelefone').value.trim(),
+    email: document.getElementById('clEditEmail').value.trim(),
+    endereco: document.getElementById('clEditEndereco').value.trim(),
+    observacoes: document.getElementById('clEditObs').value.trim()
+  }).eq('id', id);
+  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar.'; return; }
+  const idxCache = clientesCache.findIndex(c => c.id === id);
+  if (idxCache >= 0) Object.assign(clientesCache[idxCache], { nome, telefone: document.getElementById('clEditTelefone').value.trim(), email: document.getElementById('clEditEmail').value.trim(), endereco: document.getElementById('clEditEndereco').value.trim(), observacoes: document.getElementById('clEditObs').value.trim() });
+  await clVerDetalhes(id);
 }
 
 async function ctExcluirContrato(contratoId, clienteId) {
@@ -950,46 +1029,18 @@ async function renderAgenda() {
   agModo = 'calendario';
   if (!agCalendarRef) agCalendarRef = new Date();
   const conteudo = document.getElementById("conteudo");
-  const { data: clientes } = await supabaseClient.from("clientes").select("id,nome").eq("empresa_id", empresaAtual.id).order("nome");
-  const opcoesClientes = (clientes || []).map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('');
 
   conteudo.innerHTML = `
-    <div class="atalhos-row">
-      <button class="atalho-btn atalho-primario" id="agAbrirFormBtn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        <span>Novo compromisso</span>
-      </button>
-      <button class="atalho-btn atalho-secundario" id="agAbrirNovaOSBtn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONE_OS}</svg>
-        <span>Nova OS</span>
-      </button>
-    </div>
-    <div class="card hidden" id="agFormCard">
-      <h3>Novo compromisso</h3>
-      <label>Título</label><input type="text" id="agTitulo" placeholder="Ex: Visita técnica, instalação...">
-      <label>Tipo</label>
-      <select id="agTipo">
-        <option value="visita">Visita técnica</option>
-        <option value="instalacao">Instalação</option>
-        <option value="manutencao">Manutenção</option>
-        <option value="outro">Outro</option>
-      </select>
-      <label>Cliente (opcional)</label>
-      <select id="agCliente"><option value="">— nenhum —</option>${opcoesClientes}</select>
-      <label>Data e hora</label><input type="datetime-local" id="agDataHora">
-      <label>Observações</label><input type="text" id="agObs" placeholder="Opcional">
-      <div class="msg" id="agMsg"></div>
-      <button class="btn" id="agSalvarBtn">Adicionar à agenda</button>
-    </div>
+    <button class="btn" id="agAbrirNovaOSBtn">
+      <span style="display:flex; align-items:center; justify-content:center; gap:8px;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONE_OS}</svg>
+        Nova OS
+      </span>
+    </button>
     <button class="btn btn-secundario" id="agVerKanbanBtn">📋 Ver ordens de serviço por status</button>
     <div class="card" id="agDinamicoCard"><p class="vazio">Carregando...</p></div>
   `;
-  document.getElementById("agAbrirFormBtn").addEventListener("click", () => {
-    document.getElementById("agFormCard").classList.remove("hidden");
-    document.getElementById("agTitulo").focus();
-  });
   document.getElementById("agAbrirNovaOSBtn").addEventListener("click", irParaNovaOS);
-  document.getElementById("agSalvarBtn").addEventListener("click", agSalvarNovo);
   document.getElementById("agVerKanbanBtn").addEventListener("click", () => { agModo = 'kanban'; agAtualizarDinamico(); });
   await agAtualizarDinamico();
 }
@@ -1001,29 +1052,6 @@ function agTipoLabel(t) {
 function agFormatarData(iso) {
   const d = new Date(iso);
   return d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }) + ' às ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-}
-
-async function agSalvarNovo() {
-  const titulo = document.getElementById('agTitulo').value.trim();
-  const dataHora = document.getElementById('agDataHora').value;
-  const msg = document.getElementById('agMsg');
-  if (!titulo || !dataHora) { msg.className = 'msg erro'; msg.textContent = 'Preencha título e data/hora.'; return; }
-  const clienteId = document.getElementById('agCliente').value || null;
-  const { error } = await supabaseClient.from('agenda').insert({
-    empresa_id: empresaAtual.id,
-    cliente_id: clienteId,
-    titulo,
-    tipo: document.getElementById('agTipo').value,
-    data_hora: new Date(dataHora).toISOString(),
-    observacoes: document.getElementById('agObs').value.trim()
-  });
-  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar.'; return; }
-  const dataObj = new Date(dataHora);
-  ['agTitulo','agDataHora','agObs'].forEach(id => document.getElementById(id).value = '');
-  msg.className = 'msg ok'; msg.textContent = 'Adicionado!';
-  agModo = 'calendario';
-  agCalendarRef = new Date(dataObj.getFullYear(), dataObj.getMonth(), 1);
-  await agAtualizarDinamico();
 }
 
 async function agAtualizarStatus(id, status) {
@@ -1081,18 +1109,21 @@ function agParaInputDatetime(iso) {
 async function agRenderCompromisso(card) {
   const { data: ag } = await supabaseClient.from('agenda').select('*, clientes(nome)').eq('id', agAgendaSelecionadaId).single();
   agAgendaAtualObj = ag;
+
+  const { data: osVinculada } = await supabaseClient.from('ordens_servico').select('id,valor,status,dados').eq('agenda_id', agAgendaSelecionadaId).maybeSingle();
+  const itensOS = osVinculada ? osExtrairItensParaExibir(osVinculada.dados) : [];
+  const resumoServico = itensOS.length ? itensOS.map(i => i.titulo).join(', ') : agTipoLabel(ag.tipo);
+
   card.innerHTML = `
     <div class="voltar-link" id="cpVoltarBtn" style="margin-top:0;margin-bottom:10px;text-align:left;">← Voltar</div>
     <h3 style="font-size:15px;">${ag.clientes ? esc(ag.clientes.nome) : 'Sem cliente vinculado'}</h3>
     ${ag.cliente_id ? `<div class="voltar-link" id="cpVerClienteBtn" style="margin-top:0; margin-bottom:12px; text-align:left;">Ver ficha completa do cliente →</div>` : ''}
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-size:12px; color:var(--cinza-texto); font-weight:600; text-transform:uppercase; margin-bottom:4px;">Serviço</div>
+      <div style="font-weight:700; font-size:14.5px;">${esc(resumoServico)}</div>
+      ${osVinculada ? `<div class="sub-item" style="margin-top:4px;">${money(osVinculada.valor || 0)}</div>` : ''}
+    </div>
     <label>Título</label><input type="text" id="cpTitulo" value="${esc(ag.titulo || '')}">
-    <label>Tipo</label>
-    <select id="cpTipo">
-      <option value="visita" ${ag.tipo === 'visita' ? 'selected' : ''}>Visita técnica</option>
-      <option value="instalacao" ${ag.tipo === 'instalacao' ? 'selected' : ''}>Instalação</option>
-      <option value="manutencao" ${ag.tipo === 'manutencao' ? 'selected' : ''}>Manutenção</option>
-      <option value="outro" ${ag.tipo === 'outro' ? 'selected' : ''}>Outro</option>
-    </select>
     <label>Data e hora</label><input type="datetime-local" id="cpDataHora" value="${agParaInputDatetime(ag.data_hora)}">
     <label>Status</label>
     <select id="cpStatus">
@@ -1103,12 +1134,12 @@ async function agRenderCompromisso(card) {
     <label>Observações</label><input type="text" id="cpObs" value="${esc(ag.observacoes || '')}">
     <div class="msg" id="cpMsg"></div>
     <button class="btn" id="cpSalvarBtn">Salvar alterações</button>
-    <button class="btn btn-secundario" id="cpAbrirOSBtn">Ver / criar Ordem de Serviço</button>
+    ${osVinculada ? `<button class="btn btn-secundario" id="cpAbrirOSBtn">Ver Ordem de Serviço</button>` : ''}
     <button class="btn btn-secundario" id="cpExcluirBtn" style="color:var(--erro); border-color:var(--erro);">Excluir este compromisso</button>
   `;
   document.getElementById('cpVoltarBtn').addEventListener('click', () => { agModo = 'dia'; agAtualizarDinamico(); });
   document.getElementById('cpSalvarBtn').addEventListener('click', cpSalvar);
-  document.getElementById('cpAbrirOSBtn').addEventListener('click', () => osAbrirComContexto({ agendaId: agAgendaSelecionadaId, orcamentoId: null }));
+  document.getElementById('cpAbrirOSBtn')?.addEventListener('click', () => osAbrirComContexto({ osId: osVinculada.id }));
   document.getElementById('cpExcluirBtn').addEventListener('click', cpExcluir);
   if (ag.cliente_id) document.getElementById('cpVerClienteBtn').addEventListener('click', () => irParaFichaCliente(ag.cliente_id));
 }
@@ -1119,7 +1150,6 @@ async function cpSalvar() {
   if (!dataHora) { msg.className = 'msg erro'; msg.textContent = 'Escolha data e hora.'; return; }
   const { error } = await supabaseClient.from('agenda').update({
     titulo: document.getElementById('cpTitulo').value.trim(),
-    tipo: document.getElementById('cpTipo').value,
     data_hora: new Date(dataHora).toISOString(),
     status: document.getElementById('cpStatus').value,
     observacoes: document.getElementById('cpObs').value.trim()
@@ -1229,181 +1259,208 @@ async function agRenderDia(card) {
   });
 }
 
-async function agRenderOS(card) {
-  let clienteInfo = null, clienteId = null, cabecalhoTitulo = '', cabecalhoSub = '', tipoPadrao = 'instalacao', osExistente = null, prefillItem = null, prefillValor = null;
+function osExtrairItensParaExibir(dados) {
+  if (!dados) return [];
+  if (Array.isArray(dados.items)) {
+    return dados.items.map(it => {
+      if (it.titulo !== undefined) return it; // já vem pronto (formato novo)
+      const d = avItemDescricaoCliente(it);
+      const cfg = construirConfigEstruturado(empresaAtual.precos.config);
+      const r = avCalcItem(it, cfg);
+      return { titulo: d.titulo, detalhe: d.detalhe, valor: r.total };
+    });
+  }
+  if (dados.tipo) {
+    const d = avItemDescricaoCliente(dados);
+    return [{ titulo: d.titulo, detalhe: d.detalhe, valor: null }];
+  }
+  return [];
+}
 
-  // Se já sabemos o ID da própria OS, ela é a fonte da verdade — evita casos "órfãos" (sem agenda nem orçamento vinculado)
+function ctItemDescricao(e) {
+  const ehMultiplo = (e.tipo === 'multi' || e.tipo === 'vrf');
+  const porteTxt = ehMultiplo ? (e.evaps || []).map(ev => `${ev.qtd}x ${ev.porte}`).join(', ') : e.porte;
+  const qtdTxt = ehMultiplo ? (e.evaps || []).reduce((s, ev) => s + (parseInt(ev.qtd) || 1), 0) : e.qtd;
+  return { titulo: CT_TIPOS.find(t => t.id === e.tipo).label, detalhe: `${porteTxt} · ${qtdTxt}x · acesso ${CT_ACESSOS.find(a => a.id === e.acesso).label.toLowerCase()}` };
+}
+
+async function agRenderOS(card) {
+  let clienteInfo = null, clienteId = null, origemLabel = '', origemValor = null, itensPreview = [], osExistente = null;
+
   if (osContexto.osId) {
     const { data: osDireta } = await supabaseClient.from('ordens_servico').select('*').eq('id', osContexto.osId).maybeSingle();
     if (osDireta) {
       osExistente = osDireta;
       osContexto.agendaId = osDireta.agenda_id || null;
       osContexto.orcamentoId = osDireta.orcamento_id || null;
-      if (!osContexto.agendaId && !osContexto.orcamentoId) osContexto.clienteId = osDireta.cliente_id || osContexto.clienteId;
+      osContexto.contratoId = osDireta.contrato_id || null;
+      osContexto.clienteId = osDireta.cliente_id || osContexto.clienteId;
     }
   }
 
-  if (osContexto.agendaId) {
-    const { data: ag } = await supabaseClient.from('agenda').select('*, clientes(nome,telefone,endereco)').eq('id', osContexto.agendaId).single();
-    agAgendaAtualObj = ag;
-    clienteInfo = ag.clientes;
-    clienteId = ag.cliente_id;
-    cabecalhoTitulo = ag.clientes ? ag.clientes.nome : ag.titulo;
-    cabecalhoSub = agFormatarData(ag.data_hora) + ' · ' + agTipoLabel(ag.tipo);
-    tipoPadrao = ag.tipo === 'manutencao' ? 'manutencao' : 'instalacao';
-    if (!osExistente) { const { data: os } = await supabaseClient.from('ordens_servico').select('*').eq('agenda_id', osContexto.agendaId).maybeSingle(); osExistente = os; }
-  } else if (osContexto.orcamentoId) {
-    const { data: orc } = await supabaseClient.from('orcamentos').select('*, clientes(nome,telefone,endereco)').eq('id', osContexto.orcamentoId).single();
-    clienteInfo = orc.clientes;
-    clienteId = orc.cliente_id;
-    cabecalhoTitulo = orc.clientes ? orc.clientes.nome : 'Cliente';
-    cabecalhoSub = ((orc.dados && orc.dados.numero) || 'Orçamento') + ' · ' + money(orc.valor_total || 0);
-    const itens = (orc.dados && orc.dados.items) || [];
-    if (itens.length) { prefillItem = itens[0]; tipoPadrao = itens[0].tipo; }
-    prefillValor = orc.valor_total;
-    if (!osExistente) { const { data: os } = await supabaseClient.from('ordens_servico').select('*').eq('orcamento_id', osContexto.orcamentoId).maybeSingle(); osExistente = os; }
-  } else if (osContexto.clienteId) {
-    // OS avulsa: sem agenda nem orçamento de origem — cliente foi escolhido direto (nova OS ou OS órfã já existente)
-    clienteId = osContexto.clienteId;
+  if (osContexto.orcamentoId) {
+    const { data: orc } = await supabaseClient.from('orcamentos').select('*, clientes(nome,telefone,endereco)').eq('id', osContexto.orcamentoId).maybeSingle();
+    if (orc) {
+      clienteInfo = orc.clientes; clienteId = orc.cliente_id;
+      origemLabel = esc((orc.dados && orc.dados.numero) || 'Orçamento avulso');
+      origemValor = orc.valor_total;
+      const cfg = construirConfigEstruturado(empresaAtual.precos.config);
+      itensPreview = ((orc.dados && orc.dados.items) || []).map(it => {
+        const d = avItemDescricaoCliente(it);
+        const r = avCalcItem(it, cfg);
+        return { titulo: d.titulo, detalhe: d.detalhe, valor: r.total };
+      });
+      if (!osExistente) { const { data: os } = await supabaseClient.from('ordens_servico').select('*').eq('orcamento_id', osContexto.orcamentoId).maybeSingle(); osExistente = os; }
+    }
+  } else if (osContexto.contratoId) {
+    const { data: ctr } = await supabaseClient.from('contratos').select('*, clientes(nome,telefone,endereco)').eq('id', osContexto.contratoId).maybeSingle();
+    if (ctr) {
+      clienteInfo = ctr.clientes; clienteId = ctr.cliente_id;
+      origemLabel = 'Contrato de manutenção';
+      origemValor = ctr.valor_visita;
+      const cfgP = Object.assign({}, CT_VALORES_PADRAO, (empresaAtual.precos.pmoc || {}));
+      itensPreview = ((ctr.dados && ctr.dados.equipamentos) || []).map(e => {
+        const d = ctItemDescricao(e);
+        return { titulo: d.titulo, detalhe: d.detalhe, valor: ctCalcularItem(e, cfgP) };
+      });
+      if (!osExistente) { const { data: os } = await supabaseClient.from('ordens_servico').select('*').eq('contrato_id', osContexto.contratoId).maybeSingle(); osExistente = os; }
+    }
+  }
+
+  if (!clienteId && osContexto.clienteId) clienteId = osContexto.clienteId;
+  if (!clienteInfo && clienteId) {
     const { data: cli } = await supabaseClient.from('clientes').select('nome,telefone,endereco').eq('id', clienteId).maybeSingle();
     clienteInfo = cli;
-    cabecalhoTitulo = clienteInfo ? clienteInfo.nome : 'Ordem de serviço avulsa';
-    cabecalhoSub = osExistente ? 'Sem agendamento ou orçamento vinculado' : 'Nova ordem de serviço avulsa';
   }
   osContexto.clienteId = clienteId;
   osContexto.clienteNome = clienteInfo ? clienteInfo.nome : null;
 
+  const itensExibir = osExistente ? osExtrairItensParaExibir(osExistente.dados) : itensPreview;
+  osContexto._itensSnapshot = itensExibir;
+  const valorSomado = itensExibir.reduce((s, i) => s + (i.valor || 0), 0);
+  const valorOrigem = origemValor != null ? origemValor : valorSomado;
+
   const cabecalho = `
     <div class="voltar-link" id="osVoltarBtn" style="margin-top:0;margin-bottom:10px;text-align:left;">← Voltar</div>
-    <h3 style="font-size:15px;">${esc(cabecalhoTitulo)}</h3>
-    <div class="sub-item">${cabecalhoSub}</div>
+    <h3 style="font-size:15px;">${esc(clienteInfo ? clienteInfo.nome : 'Cliente')}</h3>
+    ${origemLabel ? `<div class="sub-item">${origemLabel}</div>` : ''}
     ${clienteInfo && clienteInfo.telefone ? `<div class="sub-item">${esc(clienteInfo.telefone)}</div>` : ''}
     ${clienteInfo && clienteInfo.endereco ? `<div class="sub-item">${esc(clienteInfo.endereco)}</div>` : ''}
     ${clienteId ? `<div class="voltar-link" id="osVerClienteBtn" style="margin-top:6px; margin-bottom:0; text-align:left;">Ver ficha completa do cliente →</div>` : ''}
   `;
 
-  const cfgEstruturado = construirConfigEstruturado(empresaAtual.precos.config);
-  const dadosExistentes = (osExistente && osExistente.dados) ? osExistente.dados : (prefillItem || { tipo: tipoPadrao, porte: '12000', dificuldade: 'medio', metros: 3, suporte: false, eletrica220: false, pecasDesc: '', pecas: 0, extraDesc: '', extraValor: 0 });
-  const valorInicial = osExistente ? osExistente.valor : (prefillValor != null ? prefillValor : '');
-  const valorPreenchidoAutomaticamente = !osExistente && prefillValor != null;
+  const itensHtml = itensExibir.length
+    ? itensExibir.map(it => `
+        <div style="padding:10px 0; border-bottom:1px solid var(--cinza-linha);">
+          <div style="font-weight:700; font-size:13.5px;">${esc(it.titulo)}</div>
+          <div class="sub-item">${esc(it.detalhe)}</div>
+          ${it.valor != null ? `<div style="text-align:right; color:var(--azul); font-weight:700; font-size:13px; margin-top:4px;">${money(it.valor)}</div>` : ''}
+        </div>`).join('')
+    : '<p class="vazio">Sem detalhes salvos deste serviço.</p>';
 
-  const osFormHtml = `
-    <label>Tipo de serviço</label>
-    <select id="osTipo">
-      <option value="instalacao" ${dadosExistentes.tipo === 'instalacao' ? 'selected' : ''}>Instalação</option>
-      <option value="manutencao" ${dadosExistentes.tipo === 'manutencao' ? 'selected' : ''}>Manutenção</option>
-      <option value="higienizacao" ${dadosExistentes.tipo === 'higienizacao' ? 'selected' : ''}>Higienização</option>
-    </select>
-    <label>Porte do aparelho (BTUs)</label>
-    <select id="osPorte">${['9000','12000','18000','24000','30000','36000'].map(v => `<option value="${v}" ${dadosExistentes.porte === v ? 'selected' : ''}>${v === '36000' ? '36.000+' : (parseInt(v)/1000) + '.000'}</option>`).join('')}</select>
-    <label>Dificuldade de acesso</label>
-    <select id="osDificuldade">
-      <option value="facil" ${dadosExistentes.dificuldade === 'facil' ? 'selected' : ''}>Fácil</option>
-      <option value="medio" ${dadosExistentes.dificuldade === 'medio' ? 'selected' : ''}>Médio</option>
-      <option value="dificil" ${dadosExistentes.dificuldade === 'dificil' ? 'selected' : ''}>Difícil</option>
-    </select>
-    <div id="osCamposInstalacao" class="${dadosExistentes.tipo === 'instalacao' ? '' : 'hidden'}">
-      <label>Distância entre unidades (metros)</label>
-      <input type="number" min="0" step="0.5" id="osMetros" value="${dadosExistentes.metros || 0}">
-      <div class="checkbox-row"><input type="checkbox" id="osSuporte" ${dadosExistentes.suporte ? 'checked' : ''}><label>Suporte / estrutura extra</label></div>
-      <div class="checkbox-row"><input type="checkbox" id="osEletrica220" ${dadosExistentes.eletrica220 ? 'checked' : ''}><label>Instalação elétrica 220V</label></div>
+  const valorInicial = osExistente ? osExistente.valor : valorOrigem;
+  const formasPagamento = [
+    ['dinheiro', 'Dinheiro'], ['pix', 'PIX'], ['debito', 'Cartão de débito'], ['credito', 'Cartão de crédito'],
+    ['transferencia', 'Transferência'], ['boleto', 'Boleto'], ['combinar', 'A combinar']
+  ];
+  const formaAtual = (osExistente && osExistente.forma_pagamento) || 'pix';
+
+  card.innerHTML = cabecalho + `
+    <div class="card">
+      <h3 style="font-size:15px;">Serviço</h3>
+      ${itensHtml}
+      <div class="item-subtotal" style="margin-top:8px; padding-top:10px;"><span>Total orçado</span><b>${money(valorOrigem)}</b></div>
     </div>
-    <div id="osCamposManutencao" class="${dadosExistentes.tipo === 'manutencao' ? '' : 'hidden'}">
-      <label>Peça(s) — descrição</label>
-      <input type="text" id="osPecasDesc" value="${esc(dadosExistentes.pecasDesc || '')}">
-      <label>Valor da(s) peça(s) (R$)</label>
-      <input type="number" min="0" id="osPecas" value="${dadosExistentes.pecas || 0}">
-    </div>
-    <label>Custo extra personalizado (opcional)</label>
-    <input type="text" placeholder="Descrição" id="osExtraDesc" value="${esc(dadosExistentes.extraDesc || '')}">
-    <input type="number" min="0" placeholder="Valor (R$)" id="osExtraValor" value="${dadosExistentes.extraValor || 0}" style="margin-top:6px;">
-    <div class="item-subtotal" style="margin-top:14px;"><span>Valor calculado (sugestão)</span><b id="osValorCalculado">R$ 0,00</b></div>
-    <label>Valor final da OS (R$)</label>
-    <input type="number" id="osValor" value="${valorInicial}" ${valorPreenchidoAutomaticamente ? 'data-editado-manualmente="1"' : ''}>
-    ${valorPreenchidoAutomaticamente ? '<div class="note">Valor trazido do orçamento original. Edite se necessário.</div>' : ''}
-    <label>Observações internas</label>
-    <input type="text" id="osObs" value="${esc(osExistente ? (osExistente.observacoes || '') : '')}" placeholder="Opcional">
-    <div class="checkbox-row"><input type="checkbox" id="osPago" ${osExistente && osExistente.pago ? 'checked' : ''}><label>Serviço pago</label></div>
-    <div id="osFormaPagamentoWrap" class="${osExistente && osExistente.pago ? '' : 'hidden'}">
-      <label>Forma de pagamento</label>
-      <select id="osFormaPagamento">
-        <option value="dinheiro" ${osExistente && osExistente.forma_pagamento === 'dinheiro' ? 'selected' : ''}>Dinheiro</option>
-        <option value="pix" ${!osExistente || !osExistente.forma_pagamento || osExistente.forma_pagamento === 'pix' ? 'selected' : ''}>PIX</option>
-        <option value="debito" ${osExistente && osExistente.forma_pagamento === 'debito' ? 'selected' : ''}>Cartão de débito</option>
-        <option value="credito" ${osExistente && osExistente.forma_pagamento === 'credito' ? 'selected' : ''}>Cartão de crédito</option>
-        <option value="transferencia" ${osExistente && osExistente.forma_pagamento === 'transferencia' ? 'selected' : ''}>Transferência</option>
-        <option value="boleto" ${osExistente && osExistente.forma_pagamento === 'boleto' ? 'selected' : ''}>Boleto</option>
-        <option value="combinar" ${osExistente && osExistente.forma_pagamento === 'combinar' ? 'selected' : ''}>A combinar</option>
-      </select>
-    </div>
-  `;
-
-  function osLerItemAtual() {
-    return {
-      tipo: document.getElementById('osTipo').value,
-      porte: document.getElementById('osPorte').value,
-      dificuldade: document.getElementById('osDificuldade').value,
-      metros: parseFloat(document.getElementById('osMetros').value) || 0,
-      suporte: document.getElementById('osSuporte').checked,
-      eletrica220: document.getElementById('osEletrica220').checked,
-      pecasDesc: document.getElementById('osPecasDesc').value,
-      pecas: parseFloat(document.getElementById('osPecas').value) || 0,
-      extraDesc: document.getElementById('osExtraDesc').value,
-      extraValor: parseFloat(document.getElementById('osExtraValor').value) || 0
-    };
-  }
-
-  function osRecalcular() {
-    document.getElementById('osCamposInstalacao').classList.toggle('hidden', document.getElementById('osTipo').value !== 'instalacao');
-    document.getElementById('osCamposManutencao').classList.toggle('hidden', document.getElementById('osTipo').value !== 'manutencao');
-    const it = osLerItemAtual();
-    const r = avCalcItem(it, cfgEstruturado);
-    document.getElementById('osValorCalculado').textContent = money(r.total);
-    const campoValor = document.getElementById('osValor');
-    if (!campoValor.dataset.editadoManualmente) campoValor.value = r.total.toFixed(2);
-  }
-
-  if (osExistente) {
-    card.innerHTML = cabecalho + `
-      <h3 style="font-size:15px; margin-top:16px;">Ordem de serviço</h3>
-      <label>Status</label>
+    <div class="card">
+      ${osExistente ? `<label>Status</label>
       <select id="osStatus">
         <option value="aberta" ${osExistente.status === 'aberta' ? 'selected' : ''}>Aberta</option>
         <option value="em_andamento" ${osExistente.status === 'em_andamento' ? 'selected' : ''}>Em andamento</option>
         <option value="concluida" ${osExistente.status === 'concluida' ? 'selected' : ''}>Concluída</option>
-      </select>
-      ${osFormHtml}
-      <button class="btn" id="osSalvarBtn">Salvar OS</button>
+      </select>` : ''}
+      <label>Valor final da OS (R$)</label>
+      <input type="number" id="osValor" value="${valorInicial}">
+      <div class="note">Ajuste aqui se o valor combinado com o cliente ficou diferente do orçado.</div>
+      <label>Observações internas</label>
+      <input type="text" id="osObs" value="${esc(osExistente ? (osExistente.observacoes || '') : '')}" placeholder="Opcional">
+      <div class="checkbox-row"><input type="checkbox" id="osPago" ${osExistente && osExistente.pago ? 'checked' : ''}><label>Serviço pago</label></div>
+      <div id="osFormaPagamentoWrap" class="${osExistente && osExistente.pago ? '' : 'hidden'}">
+        <label>Forma de pagamento</label>
+        <select id="osFormaPagamento">${formasPagamento.map(([v, l]) => `<option value="${v}" ${formaAtual === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      </div>
+      <button class="btn" id="osSalvarBtn">${osExistente ? 'Salvar OS' : 'Criar OS'}</button>
       <div class="msg" id="osMsg"></div>
-      <button class="btn btn-secundario" id="osExcluirBtn" style="color:var(--erro); border-color:var(--erro); margin-top:10px;">Excluir esta OS</button>
-    `;
-    document.getElementById('osSalvarBtn').addEventListener('click', () => osSalvar(osExistente.id));
-    document.getElementById('osExcluirBtn').addEventListener('click', () => osExcluir(osExistente.id));
-  } else {
-    card.innerHTML = cabecalho + `
-      <h3 style="font-size:15px; margin-top:16px;">Criar ordem de serviço</h3>
-      ${osFormHtml}
-      <button class="btn" id="osSalvarBtn">Criar OS</button>
-      <div class="msg" id="osMsg"></div>
-    `;
-    document.getElementById('osSalvarBtn').addEventListener('click', () => osSalvar(null));
-  }
+      ${osExistente ? `<button class="btn btn-secundario" id="osExcluirBtn" style="color:var(--erro); border-color:var(--erro); margin-top:10px;">Excluir esta OS</button>` : ''}
+    </div>
+    ${osExistente ? (osContexto.agendaId ? `
+    <div class="card" id="osAgendamentoCard">
+      <h3 style="font-size:15px;">Agendamento</h3>
+      <p class="vazio" style="padding:8px 0;">Carregando...</p>
+    </div>` : `
+    <div class="card">
+      <h3 style="font-size:15px;">Agendamento</h3>
+      <p class="note" style="margin-top:-4px;">Cliente aprovou? Escolha quando o serviço será feito.</p>
+      <label>Data e hora</label>
+      <input type="datetime-local" id="osAgDataHora">
+      <div class="msg" id="osAgMsg"></div>
+      <button class="btn btn-ambar" id="osConfirmarAgendaBtn">Confirmar agendamento</button>
+    </div>`) : ''}
+  `;
+
   document.getElementById('osVoltarBtn').addEventListener('click', voltarDoOS);
-  if (clienteId) document.getElementById('osVerClienteBtn').addEventListener('click', () => irParaFichaCliente(clienteId));
-  ['osTipo','osPorte','osDificuldade','osMetros','osSuporte','osEletrica220','osPecasDesc','osPecas','osExtraDesc','osExtraValor'].forEach(id => {
-    document.getElementById(id).addEventListener('input', osRecalcular);
-  });
-  document.getElementById('osValor').addEventListener('input', (e) => { e.target.dataset.editadoManualmente = '1'; });
-  document.getElementById('osPago').addEventListener('change', (e) => {
+  if (clienteId) document.getElementById('osVerClienteBtn')?.addEventListener('click', () => irParaFichaCliente(clienteId));
+  document.getElementById('osPago')?.addEventListener('change', (e) => {
     document.getElementById('osFormaPagamentoWrap').classList.toggle('hidden', !e.target.checked);
   });
-  osRecalcular();
+  document.getElementById('osSalvarBtn').addEventListener('click', () => osSalvar(osExistente ? osExistente.id : null));
+  document.getElementById('osExcluirBtn')?.addEventListener('click', () => osExcluir(osExistente.id));
+  document.getElementById('osConfirmarAgendaBtn')?.addEventListener('click', () => osConfirmarAgendamento(osExistente.id));
+
+  if (osExistente && osContexto.agendaId) {
+    const { data: ag } = await supabaseClient.from('agenda').select('data_hora,status').eq('id', osContexto.agendaId).maybeSingle();
+    const agCard = document.getElementById('osAgendamentoCard');
+    if (agCard) {
+      agCard.innerHTML = `
+        <h3 style="font-size:15px;">Agendamento</h3>
+        ${ag ? `<div class="sub-item">${agFormatarData(ag.data_hora)}</div><span class="status-tag status-${ag.status}">${ag.status}</span>` : '<p class="vazio">Compromisso não encontrado.</p>'}
+        <div class="voltar-link" id="osVerCompromissoBtn" style="margin-top:10px;">Ver / editar compromisso →</div>
+      `;
+      document.getElementById('osVerCompromissoBtn').addEventListener('click', () => {
+        agAgendaSelecionadaId = osContexto.agendaId;
+        agModo = 'compromisso';
+        agAtualizarDinamico();
+      });
+    }
+  }
 }
 
 async function voltarDoOS() {
-  if (osContexto.agendaId) { agModo = 'compromisso'; agAtualizarDinamico(); }
+  if (osContexto.agendaId) { agAgendaSelecionadaId = osContexto.agendaId; agModo = 'compromisso'; agAtualizarDinamico(); }
   else if (osContexto.clienteId) { await irParaFichaCliente(osContexto.clienteId); }
   else { agModo = 'calendario'; agAtualizarDinamico(); }
+}
+
+async function osConfirmarAgendamento(osId) {
+  const msgEl = document.getElementById('osAgMsg');
+  const dataHora = document.getElementById('osAgDataHora').value;
+  if (!dataHora) { msgEl.className = 'msg erro'; msgEl.textContent = 'Escolha a data e hora.'; return; }
+  const itens = osContexto._itensSnapshot || [];
+  const tituloResumo = itens[0] ? itens[0].titulo : 'Serviço';
+  const resumoMin = tituloResumo.toLowerCase();
+  const tipoAgenda = osContexto.contratoId ? 'manutencao' : (resumoMin.includes('instala') ? 'instalacao' : (resumoMin.includes('manuten') ? 'manutencao' : 'outro'));
+  const { data: novoCompromisso, error } = await supabaseClient.from('agenda').insert({
+    empresa_id: empresaAtual.id,
+    cliente_id: osContexto.clienteId,
+    titulo: (osContexto.clienteNome ? osContexto.clienteNome + ' — ' : '') + tituloResumo,
+    tipo: tipoAgenda,
+    data_hora: new Date(dataHora).toISOString(),
+    observacoes: ''
+  }).select().single();
+  if (error) { msgEl.className = 'msg erro'; msgEl.textContent = 'Erro ao agendar.'; return; }
+  await supabaseClient.from('ordens_servico').update({ agenda_id: novoCompromisso.id }).eq('id', osId);
+  osContexto.agendaId = novoCompromisso.id;
+  msgEl.className = 'msg ok'; msgEl.textContent = 'Agendado!';
+  setTimeout(() => agAtualizarDinamico(), 500);
 }
 
 async function osSalvar(osId) {
@@ -1419,26 +1476,14 @@ async function osSalvar(osId) {
       dataPagamento = new Date().toISOString();
     }
   }
-  const dados = {
-    tipo: document.getElementById('osTipo').value,
-    porte: document.getElementById('osPorte').value,
-    dificuldade: document.getElementById('osDificuldade').value,
-    metros: parseFloat(document.getElementById('osMetros').value) || 0,
-    suporte: document.getElementById('osSuporte').checked,
-    eletrica220: document.getElementById('osEletrica220').checked,
-    pecasDesc: document.getElementById('osPecasDesc').value,
-    pecas: parseFloat(document.getElementById('osPecas').value) || 0,
-    extraDesc: document.getElementById('osExtraDesc').value,
-    extraValor: parseFloat(document.getElementById('osExtraValor').value) || 0
-  };
-  const tipoLabel = { instalacao: 'Instalação', manutencao: 'Manutenção', higienizacao: 'Higienização' }[dados.tipo];
+  const origemLabel = osContexto.contratoId ? 'Contrato de manutenção' : 'Orçamento';
   const payload = {
     empresa_id: empresaAtual.id,
     cliente_id: osContexto.clienteId || null,
     agenda_id: osContexto.agendaId || null,
     orcamento_id: osContexto.orcamentoId || null,
-    descricao: tipoLabel + (osContexto.clienteNome ? ' — ' + osContexto.clienteNome : ''),
-    dados,
+    contrato_id: osContexto.contratoId || null,
+    descricao: origemLabel + (osContexto.clienteNome ? ' — ' + osContexto.clienteNome : ''),
     valor: parseFloat(document.getElementById('osValor').value) || 0,
     observacoes: document.getElementById('osObs').value.trim(),
     status: document.getElementById('osStatus') ? document.getElementById('osStatus').value : 'aberta',
@@ -1446,6 +1491,8 @@ async function osSalvar(osId) {
     forma_pagamento: formaPagamento,
     data_pagamento: dataPagamento
   };
+  if (!osId) payload.dados = { items: osContexto._itensSnapshot || [] };
+
   let error, novoId = osId;
   if (osId) {
     ({ error } = await supabaseClient.from('ordens_servico').update(payload).eq('id', osId));
@@ -1456,26 +1503,9 @@ async function osSalvar(osId) {
   }
   if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar OS: ' + (error.message || 'erro desconhecido'); console.error('Erro ao salvar OS:', error); return; }
 
-  // Toda OS precisa de um compromisso vinculado. Se essa OS não veio de um agendamento existente, cria um automaticamente.
-  if (!osId && !osContexto.agendaId && osContexto.clienteId) {
-    const tipoAgenda = dados.tipo === 'manutencao' ? 'manutencao' : (dados.tipo === 'instalacao' ? 'instalacao' : 'outro');
-    const { data: novoCompromisso } = await supabaseClient.from('agenda').insert({
-      empresa_id: empresaAtual.id,
-      cliente_id: osContexto.clienteId,
-      titulo: payload.descricao,
-      tipo: tipoAgenda,
-      data_hora: new Date().toISOString(),
-      observacoes: dados.tipo === 'higienizacao' ? 'Higienização' : ''
-    }).select().single();
-    if (novoCompromisso) {
-      await supabaseClient.from('ordens_servico').update({ agenda_id: novoCompromisso.id }).eq('id', novoId);
-      osContexto.agendaId = novoCompromisso.id;
-      osContexto.osId = novoId;
-    }
-  }
-
+  osContexto.osId = novoId;
   msg.className = 'msg ok'; msg.textContent = 'Salvo!';
-  setTimeout(() => agAtualizarDinamico(), 600);
+  setTimeout(() => agAtualizarDinamico(), 500);
 }
 
 async function osExcluir(osId) {
@@ -1578,29 +1608,17 @@ function renderAvulso() {
         <div class="proposal-marca">feito no Cosmos Pro</div>
       </div>
       <div class="action-row">
-        <button class="btn btn-secundario" id="avPrintBtn">Salvar / imprimir PDF</button>
+        <button class="btn btn-secundario" id="avNovaAbaBtn">Salvar / imprimir PDF</button>
         <button class="btn btn-secundario" id="avWhatsappBtn">Texto p/ WhatsApp</button>
       </div>
-      <button class="btn btn-secundario" id="avNovaAbaBtn">Abrir em nova aba (recomendado p/ imprimir)</button>
       <textarea id="avWhatsappText" class="hidden" readonly></textarea>
 
       <div class="card" style="margin-top:14px;">
         <button class="btn" id="avSalvarOrcamentoBtn">Salvar orçamento no histórico do cliente</button>
         <div class="msg" id="avSalvarMsg"></div>
         <div id="avAgendarBox" class="hidden" style="margin-top:10px; padding-top:14px; border-top:1px solid var(--cinza-linha);">
-          <h3 style="font-size:15px;">Cliente aprovou? Agende o serviço</h3>
-          <label>Tipo</label>
-          <select id="avAgTipo">
-            <option value="instalacao">Instalação</option>
-            <option value="manutencao">Manutenção</option>
-            <option value="visita">Visita técnica</option>
-            <option value="outro">Outro</option>
-          </select>
-          <label>Data e hora</label>
-          <input type="datetime-local" id="avAgDataHora">
-          <button class="btn btn-ambar" id="avConfirmarAgendaBtn">Confirmar agendamento</button>
-          <div class="msg" id="avAgMsg"></div>
-          <div class="voltar-link" id="avCriarOSDiretoBtn" style="margin-top:10px;">ou criar Ordem de Serviço agora, sem agendar visita</div>
+          <p class="note" style="margin-top:0;">Cliente aprovou? Continue pra criar a Ordem de Serviço e agendar a visita.</p>
+          <button class="btn btn-ambar" id="avIrParaOSBtn">Criar Ordem de Serviço</button>
         </div>
       </div>
 
@@ -1854,27 +1872,6 @@ async function avSalvarOrcamento() {
   document.getElementById('avAgendarBox').classList.remove('hidden');
 }
 
-async function avConfirmarAgenda() {
-  const msg = document.getElementById('avAgMsg');
-  const clienteId = document.getElementById('avClienteSelect').value;
-  const dataHora = document.getElementById('avAgDataHora').value;
-  if (!avOrcamentoSalvoId || !clienteId) { msg.className = 'msg erro'; msg.textContent = 'Salve o orçamento primeiro.'; return; }
-  if (!dataHora) { msg.className = 'msg erro'; msg.textContent = 'Escolha a data e hora do serviço.'; return; }
-  const nomeCliente = document.getElementById('avClienteNome').value.trim();
-  const { error } = await supabaseClient.from('agenda').insert({
-    empresa_id: empresaAtual.id,
-    cliente_id: clienteId,
-    orcamento_id: avOrcamentoSalvoId,
-    titulo: (nomeCliente ? nomeCliente + ' — ' : '') + avOrcamentoNumero,
-    tipo: document.getElementById('avAgTipo').value,
-    data_hora: new Date(dataHora).toISOString(),
-    observacoes: ''
-  });
-  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao agendar.'; return; }
-  msg.className = 'msg ok';
-  msg.textContent = 'Agendado! Você pode ver na aba Agenda.';
-}
-
 function avSalvarConfigDebounced() {
   clearTimeout(avSalvarTimeout);
   avSalvarTimeout = setTimeout(avSalvarConfig, 800);
@@ -1927,7 +1924,6 @@ function ligarEventosAvulso() {
     select.innerHTML = '<option value="">— selecionar cliente —</option>' + avClientesCache.map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('');
     document.getElementById('avSalvarMsg').textContent = '';
     document.getElementById('avAgendarBox').classList.add('hidden');
-    document.getElementById('avAgMsg').textContent = '';
     avMontarProposta();
     document.getElementById('avEditor').classList.add('hidden');
     document.getElementById('avClientView').classList.remove('hidden');
@@ -1938,10 +1934,9 @@ function ligarEventosAvulso() {
     avMontarProposta();
   });
   document.getElementById('avSalvarOrcamentoBtn').addEventListener('click', avSalvarOrcamento);
-  document.getElementById('avConfirmarAgendaBtn').addEventListener('click', avConfirmarAgenda);
-  document.getElementById('avCriarOSDiretoBtn').addEventListener('click', () => {
+  document.getElementById('avIrParaOSBtn').addEventListener('click', () => {
     if (!avOrcamentoSalvoId) return;
-    osAbrirComContexto({ agendaId: null, orcamentoId: avOrcamentoSalvoId });
+    osAbrirComContexto({ orcamentoId: avOrcamentoSalvoId });
   });
   document.getElementById('avVoltarBtn').addEventListener('click', () => {
     document.getElementById('avClientView').classList.add('hidden');
@@ -1949,7 +1944,6 @@ function ligarEventosAvulso() {
   });
   document.getElementById('avClienteNome').addEventListener('input', avMontarProposta);
   document.getElementById('avValidadeDias').addEventListener('input', avMontarProposta);
-  document.getElementById('avPrintBtn').addEventListener('click', () => window.print());
   document.getElementById('avNovaAbaBtn').addEventListener('click', () => {
     const d = avGerarDados();
     const html = avBuildStandaloneHTML(d);
