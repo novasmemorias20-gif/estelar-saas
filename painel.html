@@ -235,7 +235,6 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
       <h2 id="nomeEmpresa" style="margin-bottom: 4px;">Carregando...</h2>
       <span class="badge-plano" id="badgePlano">...</span>
     </div>
-    <button class="btn btn-secundario" onclick="sair()">Sair</button>
   </div>
 
   <div class="tabs">
@@ -366,6 +365,14 @@ function mostrarAba(nome) {
         <div id="statusVinculoGoogle" class="sub-item">Verificando...</div>
         <button class="btn btn-secundario" id="btnVincularGoogle">Vincular conta Google</button>
         <div class="msg" id="msgVinculoGoogle"></div>
+      </div>
+      <div class="card">
+        <h3>Ajuda</h3>
+        <a href="tutorial.html" target="_blank" class="btn btn-secundario" style="text-decoration:none; display:block;">📘 Como usar o Cosmos Pro</a>
+      </div>
+      <div class="card">
+        <h3>Sessão</h3>
+        <button class="btn btn-secundario" onclick="sair()" style="color:var(--erro); border-color:var(--erro);">Sair da conta</button>
       </div>`;
     carregarStatusGoogle();
     document.getElementById('btnVincularGoogle').addEventListener('click', vincularGoogle);

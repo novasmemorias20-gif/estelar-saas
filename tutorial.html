@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Como usar — Cosmos Pro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --azul: #2563eb; --azul-escuro: #1d4ed8; --ciano: #06b6d4;
+  --gradiente: linear-gradient(135deg, var(--azul), var(--ciano));
+  --escuro: #0f172a; --cinza-texto: #64748b; --cinza-linha: #e2e8f0; --cinza-claro: #f8fafc; --ambar: #f59e0b;
+}
+* { box-sizing: border-box; }
+body { margin:0; font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--cinza-claro); color:var(--escuro); }
+.topo { background:var(--gradiente); padding:32px 20px 40px; text-align:center; color:#fff; }
+.topo h1 { font-family:"Manrope",sans-serif; font-weight:800; font-size:22px; margin:0 0 4px; }
+.topo p { margin:0; font-size:13px; color:#e0f2fe; }
+.container { max-width:640px; margin:-20px auto 40px; padding:0 16px; }
+.secao { background:#fff; border:1px solid var(--cinza-linha); border-radius:16px; padding:20px; margin-bottom:14px; box-shadow:0 1px 2px rgba(15,23,42,.05), 0 6px 16px rgba(15,23,42,.06); }
+.secao h2 { font-family:"Manrope",sans-serif; font-weight:800; font-size:16px; margin:0 0 4px; display:flex; align-items:center; gap:10px; }
+.numero { width:26px; height:26px; border-radius:8px; background:#eff6ff; color:var(--azul-escuro); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; flex-shrink:0; }
+.secao p { font-size:13.5px; color:var(--cinza-texto); line-height:1.6; margin:8px 0; }
+.secao ol, .secao ul { margin:8px 0; padding-left:20px; font-size:13.5px; color:var(--escuro); line-height:1.7; }
+.secao li { margin-bottom:4px; }
+.dica { background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:10px 14px; font-size:12.5px; color:#92400e; margin-top:10px; }
+.indice { background:#fff; border:1px solid var(--cinza-linha); border-radius:16px; padding:16px 20px; margin-bottom:14px; }
+.indice h3 { font-family:"Manrope",sans-serif; font-size:14px; margin:0 0 8px; }
+.indice a { display:block; color:var(--azul); font-size:13.5px; text-decoration:none; padding:4px 0; font-weight:600; }
+</style>
+</head>
+<body>
+<div class="topo">
+  <h1>Como usar o Cosmos Pro</h1>
+  <p>Um guia rápido do fluxo do dia a dia</p>
+</div>
+<div class="container">
+
+  <div class="indice">
+    <h3>Nesta página</h3>
+    <a href="#fluxo">O fluxo principal</a>
+    <a href="#orcamento">1. Criar um orçamento</a>
+    <a href="#os">2. Transformar em Ordem de Serviço</a>
+    <a href="#agenda">3. Agendar e acompanhar</a>
+    <a href="#clientes">Clientes</a>
+    <a href="#contrato">Contratos de manutenção</a>
+    <a href="#config">Configurações</a>
+  </div>
+
+  <div class="secao" id="fluxo">
+    <h2>O fluxo principal</h2>
+    <p>O Cosmos Pro segue sempre a mesma lógica, do orçamento até o pagamento:</p>
+    <p style="font-weight:700; color:var(--escuro);">Cliente → Orçamento (ou Contrato) → Ordem de Serviço → Agendamento → Execução → Pagamento</p>
+    <p>Tudo começa com um orçamento (ou contrato) salvo pro cliente. É a partir dele que a Ordem de Serviço nasce, já com os itens e o valor preenchidos.</p>
+  </div>
+
+  <div class="secao" id="orcamento">
+    <h2><span class="numero">1</span> Criar um orçamento</h2>
+    <ol>
+      <li>Vá na aba <b>Orçamento</b></li>
+      <li>Adicione um ou mais itens (instalação, manutenção ou higienização), cada um com porte do aparelho, dificuldade de acesso, e detalhes específicos</li>
+      <li>Clique em <b>"Gerar orçamento para o cliente"</b> pra ver a proposta pronta</li>
+      <li>Selecione o cliente cadastrado na lista</li>
+      <li>Clique em <b>"Salvar orçamento no histórico do cliente"</b></li>
+    </ol>
+    <div class="dica">💡 Se o cliente ainda não existe no sistema, cadastre ele primeiro na aba Clientes.</div>
+  </div>
+
+  <div class="secao" id="os">
+    <h2><span class="numero">2</span> Transformar em Ordem de Serviço</h2>
+    <p>Depois de salvar o orçamento, aparece o botão <b>"Criar Ordem de Serviço"</b>. Ele já traz os itens e o valor do orçamento prontos — você só confirma.</p>
+    <p>Também dá pra fazer isso depois, a qualquer momento:</p>
+    <ul>
+      <li>Pela aba <b>Clientes</b> → abra a ficha do cliente → clique num orçamento salvo → <b>"Transformar em Ordem de Serviço"</b></li>
+      <li>Pela aba <b>Agenda</b> → botão <b>"Nova OS"</b> → escolha o cliente e o orçamento (ou contrato)</li>
+    </ul>
+  </div>
+
+  <div class="secao" id="agenda">
+    <h2><span class="numero">3</span> Agendar e acompanhar</h2>
+    <p>Dentro da tela da Ordem de Serviço, tem uma seção <b>"Agendamento"</b> — escolha a data e hora e clique em <b>"Confirmar agendamento"</b>. Isso cria o compromisso na Agenda automaticamente.</p>
+    <p>Na aba <b>Agenda</b>, você vê tudo num calendário. Clicando num dia, aparecem os compromissos daquele dia. Clicando num compromisso, você pode reagendar, mudar o status ou abrir a Ordem de Serviço completa.</p>
+    <p>Também tem uma visão só das Ordens de Serviço organizadas por status (Aberta / Em andamento / Concluída) — é o quadro que aparece tanto na Início quanto na Agenda.</p>
+    <div class="dica">💡 Quando o serviço for pago, marque "Serviço pago" dentro da OS e escolha a forma de pagamento — isso alimenta o financeiro da tela Início.</div>
+  </div>
+
+  <div class="secao" id="clientes">
+    <h2>Clientes</h2>
+    <p>Na aba Clientes você cadastra nome, telefone, e-mail, endereço e observações. Também dá pra configurar um <b>intervalo de retorno</b> (a cada 30/60/90 dias, etc.) — assim o app avisa na tela Início quando a manutenção de um cliente estiver vencendo ou vencida.</p>
+    <p>Clicando num cliente já cadastrado, você vê o histórico completo: orçamentos, ordens de serviço, contratos e agenda — tudo num só lugar, e pode editar os dados dele a qualquer momento pelo ícone de lápis.</p>
+  </div>
+
+  <div class="secao" id="contrato">
+    <h2>Contratos de manutenção (PMOC)</h2>
+    <p>Disponível no Plano Completo. Serve pra fechar contratos recorrentes de manutenção com equipamentos (Split, Cassete, Piso Teto, Multi-Split, VRF).</p>
+    <p>O sistema calcula sozinho a carga térmica total e decide se o contrato precisa de Responsável Técnico e ART (obrigatório a partir de 5 TR) — e já gera o contrato jurídico completo, pronto pra assinar.</p>
+  </div>
+
+  <div class="secao" id="config">
+    <h2>Configurações</h2>
+    <p>Em <b>Ajustes</b> você define o nome, CNPJ, endereço e contato da sua empresa (aparecem nos orçamentos e contratos gerados), além de poder vincular login com Google e sair da conta.</p>
+  </div>
+
+</div>
+</body>
+</html>
