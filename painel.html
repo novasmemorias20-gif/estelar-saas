@@ -275,6 +275,13 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
 const SUPABASE_URL = "https://lkankciqsldutuncuvyl.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_QAzF6HlUkYoAumTQCzKuVg_FEmhtwQ8";
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+function temAcessoCompleto() {
+  if (!empresaAtual) return false;
+  if (empresaAtual.cortesia) return true;
+  return empresaAtual.plano === 'completo' && empresaAtual.assinatura_status === 'ativa';
+}
+
 function esc(str) {
   if (str === null || str === undefined) return '';
   return String(str)
@@ -341,7 +348,7 @@ function mostrarAba(nome) {
   else if (nome === "clientes") { renderClientes(); }
   else if (nome === "agenda") { renderAgenda(); }
   else if (nome === "contrato") {
-    if (empresaAtual.plano !== "completo") {
+    if (!temAcessoCompleto()) {
       conteudo.innerHTML = '<div class="card"><h3>Contrato de manutenção</h3><p style="color: var(--cinza-texto); font-size: 14px;">Este recurso faz parte do Plano Completo.</p></div>';
       return;
     }
@@ -371,10 +378,15 @@ function mostrarAba(nome) {
         <a href="tutorial.html" target="_blank" class="btn btn-secundario" style="text-decoration:none; display:block;">📘 Como usar o Cosmos Pro</a>
       </div>
       <div class="card">
+        <h3>Plano e assinatura</h3>
+        <div id="statusAssinatura"><p class="vazio">Carregando...</p></div>
+      </div>
+      <div class="card">
         <h3>Sessão</h3>
         <button class="btn btn-secundario" onclick="sair()" style="color:var(--erro); border-color:var(--erro);">Sair da conta</button>
       </div>`;
     carregarStatusGoogle();
+    renderStatusAssinatura();
     document.getElementById('btnVincularGoogle').addEventListener('click', vincularGoogle);
   }
 }
@@ -402,6 +414,90 @@ async function vincularGoogle() {
     options: { redirectTo: window.location.origin + '/painel.html' }
   });
   if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao vincular: ' + error.message; }
+}
+
+const PLANO_PRECOS = { basico: { mensal: 29.90, anual: 299.00 }, completo: { mensal: 79.90, anual: 799.00 } };
+const ASSINATURA_STATUS_LABEL = { trial: 'Sem assinatura ativa', pendente: 'Pagamento pendente', ativa: 'Ativa', atrasada: 'Pagamento atrasado', cancelada: 'Cancelada' };
+
+function renderStatusAssinatura() {
+  const el = document.getElementById('statusAssinatura');
+  if (!el) return;
+
+  if (empresaAtual.cortesia) {
+    el.innerHTML = `
+      <span class="status-tag status-concluido">Acesso cortesia — Completo liberado</span>
+      <p class="note" style="margin-top:10px;">Esta conta tem acesso total sem cobrança.</p>
+    `;
+    return;
+  }
+
+  const statusAtual = empresaAtual.assinatura_status || 'trial';
+  const statusLabel = ASSINATURA_STATUS_LABEL[statusAtual] || statusAtual;
+  const corStatus = statusAtual === 'ativa' ? 'concluido' : (statusAtual === 'atrasada' || statusAtual === 'cancelada' ? 'cancelado' : 'agendado');
+
+  el.innerHTML = `
+    <div style="margin-bottom:14px;">
+      <span class="badge-plano">${empresaAtual.plano === 'completo' ? 'Plano Completo' : 'Plano Básico'}</span>
+      <span class="status-tag status-${corStatus}" style="margin-left:6px;">${statusLabel}</span>
+      ${empresaAtual.assinatura_expira_em ? `<div class="sub-item" style="margin-top:6px;">Válido até ${new Date(empresaAtual.assinatura_expira_em).toLocaleDateString('pt-BR')}</div>` : ''}
+    </div>
+
+    <label>Ciclo de cobrança</label>
+    <select id="assinaturaCiclo">
+      <option value="mensal">Mensal</option>
+      <option value="anual">Anual (2 meses grátis)</option>
+    </select>
+
+    <div class="price-grid" style="grid-template-columns: 1fr; margin-top:14px; gap:10px;">
+      <button class="btn btn-secundario" id="btnAssinarBasico" style="margin-top:0; text-align:left; padding:14px;">
+        <b>Básico</b> — <span id="precoBasico">R$ 29,90/mês</span>
+      </button>
+      <button class="btn btn-ambar" id="btnAssinarCompleto" style="margin-top:0; text-align:left; padding:14px;">
+        <b>Completo</b> — <span id="precoCompleto">R$ 79,90/mês</span>
+      </button>
+    </div>
+    <div class="msg" id="msgAssinatura"></div>
+  `;
+
+  document.getElementById('assinaturaCiclo').addEventListener('change', atualizarPrecosExibidos);
+  document.getElementById('btnAssinarBasico').addEventListener('click', () => assinarPlano('basico'));
+  document.getElementById('btnAssinarCompleto').addEventListener('click', () => assinarPlano('completo'));
+}
+
+function atualizarPrecosExibidos() {
+  const ciclo = document.getElementById('assinaturaCiclo').value;
+  document.getElementById('precoBasico').textContent = ciclo === 'anual' ? `R$ ${PLANO_PRECOS.basico.anual.toFixed(2).replace('.', ',')}/ano` : `R$ ${PLANO_PRECOS.basico.mensal.toFixed(2).replace('.', ',')}/mês`;
+  document.getElementById('precoCompleto').textContent = ciclo === 'anual' ? `R$ ${PLANO_PRECOS.completo.anual.toFixed(2).replace('.', ',')}/ano` : `R$ ${PLANO_PRECOS.completo.mensal.toFixed(2).replace('.', ',')}/mês`;
+}
+
+async function assinarPlano(plano) {
+  const msg = document.getElementById('msgAssinatura');
+  const ciclo = document.getElementById('assinaturaCiclo').value;
+  msg.className = 'msg'; msg.textContent = 'Gerando cobrança...';
+
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  try {
+    const resp = await fetch('https://lkankciqsldutuncuvyl.supabase.co/functions/v1/asaas-checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+      body: JSON.stringify({ plano, ciclo })
+    });
+    const data = await resp.json();
+    if (!resp.ok || data.error) {
+      msg.className = 'msg erro'; msg.textContent = 'Erro: ' + (data.error || 'não foi possível gerar a cobrança.');
+      console.error('Erro assinatura:', data);
+      return;
+    }
+    if (data.invoiceUrl) {
+      window.open(data.invoiceUrl, '_blank');
+      msg.className = 'msg ok';
+      msg.textContent = 'Link de pagamento aberto em nova aba. Depois de pagar, volte e recarregue o app.';
+    } else {
+      msg.className = 'msg erro'; msg.textContent = 'Cobrança criada, mas sem link de pagamento. Confira no painel do Asaas.';
+    }
+  } catch (e) {
+    msg.className = 'msg erro'; msg.textContent = 'Erro de conexão: ' + e.message;
+  }
 }
 
 async function salvarDadosEmpresa() {
