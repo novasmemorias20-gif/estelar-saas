@@ -448,6 +448,9 @@ function renderStatusAssinatura() {
       <option value="anual">Anual (2 meses grátis)</option>
     </select>
 
+    <label>CPF ou CNPJ (exigido pelo Asaas pra gerar a cobrança)</label>
+    <input type="text" id="assinaturaCpfCnpj" placeholder="000.000.000-00 ou 00.000.000/0000-00" value="${esc((empresaAtual.precos.dadosEmpresa && empresaAtual.precos.dadosEmpresa.cnpj) || '')}">
+
     <div class="price-grid" style="grid-template-columns: 1fr; margin-top:14px; gap:10px;">
       <button class="btn btn-secundario" id="btnAssinarBasico" style="margin-top:0; text-align:left; padding:14px;">
         <b>Básico</b> — <span id="precoBasico">R$ 29,90/mês</span>
@@ -473,6 +476,11 @@ function atualizarPrecosExibidos() {
 async function assinarPlano(plano) {
   const msg = document.getElementById('msgAssinatura');
   const ciclo = document.getElementById('assinaturaCiclo').value;
+  const cpfCnpj = document.getElementById('assinaturaCpfCnpj').value.replace(/[^\d]/g, '');
+  if (!cpfCnpj || (cpfCnpj.length !== 11 && cpfCnpj.length !== 14)) {
+    msg.className = 'msg erro'; msg.textContent = 'Digite um CPF (11 dígitos) ou CNPJ (14 dígitos) válido.';
+    return;
+  }
   msg.className = 'msg'; msg.textContent = 'Gerando cobrança...';
 
   const { data: { session } } = await supabaseClient.auth.getSession();
@@ -480,11 +488,12 @@ async function assinarPlano(plano) {
     const resp = await fetch('https://lkankciqsldutuncuvyl.supabase.co/functions/v1/asaas-checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
-      body: JSON.stringify({ plano, ciclo })
+      body: JSON.stringify({ plano, ciclo, cpfCnpj })
     });
     const data = await resp.json();
     if (!resp.ok || data.error) {
-      msg.className = 'msg erro'; msg.textContent = 'Erro: ' + (data.error || 'não foi possível gerar a cobrança.');
+      msg.className = 'msg erro';
+      msg.textContent = 'Erro: ' + (data.error || 'não foi possível gerar a cobrança.') + (data.detalhe ? ' — ' + JSON.stringify(data.detalhe) : '');
       console.error('Erro assinatura:', data);
       return;
     }
