@@ -1141,24 +1141,75 @@ async function renderAgenda() {
   agModo = 'calendario';
   if (!agCalendarRef) agCalendarRef = new Date();
   const conteudo = document.getElementById("conteudo");
+  const { data: clientes } = await supabaseClient.from("clientes").select("id,nome").eq("empresa_id", empresaAtual.id).order("nome");
+  const opcoesClientes = (clientes || []).map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('');
 
   conteudo.innerHTML = `
-    <button class="btn" id="agAbrirNovaOSBtn">
-      <span style="display:flex; align-items:center; justify-content:center; gap:8px;">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONE_OS}</svg>
-        Nova OS
-      </span>
-    </button>
+    <div class="atalhos-row">
+      <button class="atalho-btn atalho-primario" id="agAbrirNovaOSBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONE_OS}</svg>
+        <span>Nova OS</span>
+      </button>
+      <button class="atalho-btn atalho-secundario" id="agAbrirFormBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span>Novo compromisso</span>
+      </button>
+    </div>
+    <div class="card hidden" id="agFormCard">
+      <h3>Novo compromisso</h3>
+      <p class="note" style="margin-top:-6px;">Pra reuniões, visitas técnicas ou qualquer coisa que não seja uma Ordem de Serviço. Se for um serviço, use "Nova OS" em vez disso.</p>
+      <label>Título</label><input type="text" id="agTitulo" placeholder="Ex: Reunião com fornecedor, visita técnica...">
+      <label>Tipo</label>
+      <select id="agTipo">
+        <option value="visita">Visita técnica</option>
+        <option value="reuniao">Reunião</option>
+        <option value="outro">Outro</option>
+      </select>
+      <label>Cliente (opcional)</label>
+      <select id="agCliente"><option value="">— nenhum —</option>${opcoesClientes}</select>
+      <label>Data e hora</label><input type="datetime-local" id="agDataHora">
+      <label>Observações</label><input type="text" id="agObs" placeholder="Opcional">
+      <div class="msg" id="agMsg"></div>
+      <button class="btn" id="agSalvarBtn">Adicionar à agenda</button>
+    </div>
     <button class="btn btn-secundario" id="agVerKanbanBtn">📋 Ver ordens de serviço por status</button>
     <div class="card" id="agDinamicoCard"><p class="vazio">Carregando...</p></div>
   `;
   document.getElementById("agAbrirNovaOSBtn").addEventListener("click", irParaNovaOS);
+  document.getElementById("agAbrirFormBtn").addEventListener("click", () => {
+    document.getElementById("agFormCard").classList.remove("hidden");
+    document.getElementById("agTitulo").focus();
+  });
+  document.getElementById("agSalvarBtn").addEventListener("click", agSalvarNovo);
   document.getElementById("agVerKanbanBtn").addEventListener("click", () => { agModo = 'kanban'; agAtualizarDinamico(); });
   await agAtualizarDinamico();
 }
 
+async function agSalvarNovo() {
+  const titulo = document.getElementById('agTitulo').value.trim();
+  const dataHora = document.getElementById('agDataHora').value;
+  const msg = document.getElementById('agMsg');
+  if (!titulo || !dataHora) { msg.className = 'msg erro'; msg.textContent = 'Preencha título e data/hora.'; return; }
+  const clienteId = document.getElementById('agCliente').value || null;
+  const { error } = await supabaseClient.from('agenda').insert({
+    empresa_id: empresaAtual.id,
+    cliente_id: clienteId,
+    titulo,
+    tipo: document.getElementById('agTipo').value,
+    data_hora: new Date(dataHora).toISOString(),
+    observacoes: document.getElementById('agObs').value.trim()
+  });
+  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar.'; return; }
+  const dataObj = new Date(dataHora);
+  ['agTitulo', 'agDataHora', 'agObs'].forEach(id => document.getElementById(id).value = '');
+  msg.className = 'msg ok'; msg.textContent = 'Adicionado!';
+  agModo = 'calendario';
+  agCalendarRef = new Date(dataObj.getFullYear(), dataObj.getMonth(), 1);
+  await agAtualizarDinamico();
+}
+
 function agTipoLabel(t) {
-  return { visita: 'Visita técnica', instalacao: 'Instalação', manutencao: 'Manutenção', outro: 'Outro' }[t] || t;
+  return { visita: 'Visita técnica', reuniao: 'Reunião', instalacao: 'Instalação', manutencao: 'Manutenção', outro: 'Outro' }[t] || t;
 }
 
 function agFormatarData(iso) {
@@ -1493,6 +1544,10 @@ async function agRenderOS(card) {
       <label>Valor final da OS (R$)</label>
       <input type="number" id="osValor" value="${valorInicial}">
       <div class="note">Ajuste aqui se o valor combinado com o cliente ficou diferente do orçado.</div>
+      ${!osExistente ? `
+      <label>Data e hora do serviço</label>
+      <input type="datetime-local" id="osDataHoraCriacao">
+      <div class="note">Isso já cria o compromisso na agenda junto. Se ainda não souber quando será, pode deixar em branco e agendar depois.</div>` : ''}
       <label>Observações internas</label>
       <input type="text" id="osObs" value="${esc(osExistente ? (osExistente.observacoes || '') : '')}" placeholder="Opcional">
       <div class="checkbox-row"><input type="checkbox" id="osPago" ${osExistente && osExistente.pago ? 'checked' : ''}><label>Serviço pago</label></div>
@@ -1500,7 +1555,7 @@ async function agRenderOS(card) {
         <label>Forma de pagamento</label>
         <select id="osFormaPagamento">${formasPagamento.map(([v, l]) => `<option value="${v}" ${formaAtual === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
       </div>
-      <button class="btn" id="osSalvarBtn">${osExistente ? 'Salvar OS' : 'Criar OS'}</button>
+      <button class="btn" id="osSalvarBtn">${osExistente ? 'Salvar OS' : 'Criar Ordem de Serviço'}</button>
       <div class="msg" id="osMsg"></div>
       ${osExistente ? `<button class="btn btn-secundario" id="osExcluirBtn" style="color:var(--erro); border-color:var(--erro); margin-top:10px;">Excluir esta OS</button>` : ''}
     </div>
@@ -1511,7 +1566,7 @@ async function agRenderOS(card) {
     </div>` : `
     <div class="card">
       <h3 style="font-size:15px;">Agendamento</h3>
-      <p class="note" style="margin-top:-4px;">Cliente aprovou? Escolha quando o serviço será feito.</p>
+      <p class="note" style="margin-top:-4px;">Esta OS ainda não tem data marcada. Escolha quando o serviço será feito.</p>
       <label>Data e hora</label>
       <input type="datetime-local" id="osAgDataHora">
       <div class="msg" id="osAgMsg"></div>
@@ -1552,10 +1607,7 @@ async function voltarDoOS() {
   else { agModo = 'calendario'; agAtualizarDinamico(); }
 }
 
-async function osConfirmarAgendamento(osId) {
-  const msgEl = document.getElementById('osAgMsg');
-  const dataHora = document.getElementById('osAgDataHora').value;
-  if (!dataHora) { msgEl.className = 'msg erro'; msgEl.textContent = 'Escolha a data e hora.'; return; }
+async function osCriarCompromissoVinculado(osId, dataHoraStr) {
   const itens = osContexto._itensSnapshot || [];
   const tituloResumo = itens[0] ? itens[0].titulo : 'Serviço';
   const resumoMin = tituloResumo.toLowerCase();
@@ -1565,12 +1617,21 @@ async function osConfirmarAgendamento(osId) {
     cliente_id: osContexto.clienteId,
     titulo: (osContexto.clienteNome ? osContexto.clienteNome + ' — ' : '') + tituloResumo,
     tipo: tipoAgenda,
-    data_hora: new Date(dataHora).toISOString(),
+    data_hora: new Date(dataHoraStr).toISOString(),
     observacoes: ''
   }).select().single();
-  if (error) { msgEl.className = 'msg erro'; msgEl.textContent = 'Erro ao agendar.'; return; }
+  if (error) return { error };
   await supabaseClient.from('ordens_servico').update({ agenda_id: novoCompromisso.id }).eq('id', osId);
   osContexto.agendaId = novoCompromisso.id;
+  return { data: novoCompromisso };
+}
+
+async function osConfirmarAgendamento(osId) {
+  const msgEl = document.getElementById('osAgMsg');
+  const dataHora = document.getElementById('osAgDataHora').value;
+  if (!dataHora) { msgEl.className = 'msg erro'; msgEl.textContent = 'Escolha a data e hora.'; return; }
+  const { error } = await osCriarCompromissoVinculado(osId, dataHora);
+  if (error) { msgEl.className = 'msg erro'; msgEl.textContent = 'Erro ao agendar.'; return; }
   msgEl.className = 'msg ok'; msgEl.textContent = 'Agendado!';
   setTimeout(() => agAtualizarDinamico(), 500);
 }
@@ -1616,7 +1677,19 @@ async function osSalvar(osId) {
   if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar OS: ' + (error.message || 'erro desconhecido'); console.error('Erro ao salvar OS:', error); return; }
 
   osContexto.osId = novoId;
-  msg.className = 'msg ok'; msg.textContent = 'Salvo!';
+
+  let mensagemFinal = 'Salvo!';
+  if (!osId) {
+    const dataHoraCriacao = document.getElementById('osDataHoraCriacao')?.value;
+    if (dataHoraCriacao) {
+      const { error: erroAgenda } = await osCriarCompromissoVinculado(novoId, dataHoraCriacao);
+      mensagemFinal = erroAgenda ? 'OS criada, mas houve um erro ao agendar. Tente agendar na tela seguinte.' : 'Ordem de Serviço criada e agendada!';
+    } else {
+      mensagemFinal = 'Ordem de Serviço criada! Agende quando souber a data.';
+    }
+  }
+
+  msg.className = 'msg ok'; msg.textContent = mensagemFinal;
   setTimeout(() => agAtualizarDinamico(), 500);
 }
 
