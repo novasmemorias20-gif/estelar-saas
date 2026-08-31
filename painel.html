@@ -497,6 +497,19 @@ async function assinarPlano(plano) {
       console.error('Erro assinatura:', data);
       return;
     }
+    if (data.jaAssinando) {
+      msg.className = 'msg ok';
+      msg.textContent = 'Você já está assinando este plano.';
+      return;
+    }
+    if (data.updated) {
+      msg.className = 'msg ok';
+      msg.textContent = 'Plano atualizado! A próxima cobrança já reflete o novo valor.';
+      empresaAtual.plano = plano;
+      empresaAtual.ciclo_cobranca = ciclo;
+      setTimeout(() => mostrarAba('config'), 1200);
+      return;
+    }
     if (data.invoiceUrl) {
       window.open(data.invoiceUrl, '_blank');
       msg.className = 'msg ok';
