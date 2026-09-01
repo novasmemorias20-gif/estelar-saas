@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
+<script>try { if (localStorage.getItem('estelar_tema_escuro') === '1') document.documentElement.setAttribute('data-tema', 'escuro'); } catch (e) {}</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="manifest" href="/manifest.json">
@@ -26,6 +27,7 @@
   --cinza-texto: #64748b;
   --cinza-linha: #e2e8f0;
   --cinza-claro: #f8fafc;
+  --superficie: #ffffff;
   --erro: #ef4444;
   --erro-bg: #fee2e2;
   --sucesso: #16a34a;
@@ -33,6 +35,25 @@
   --sombra: 0 1px 2px rgba(15,23,42,.05), 0 6px 16px rgba(15,23,42,.06);
   --sombra-flutuante: 0 8px 28px rgba(15,23,42,.14);
 }
+html[data-tema="escuro"] {
+  --azul-tinta: #1e293b;
+  --escuro: #e2e8f0;
+  --cinza-texto: #94a3b8;
+  --cinza-linha: #334155;
+  --cinza-claro: #0b1220;
+  --superficie: #161e2e;
+  --erro-bg: #3f1d1d;
+  --sucesso-bg: #10301f;
+  --sombra: 0 1px 2px rgba(0,0,0,.3), 0 6px 16px rgba(0,0,0,.35);
+  --sombra-flutuante: 0 8px 28px rgba(0,0,0,.45);
+}
+html[data-tema="escuro"] input, html[data-tema="escuro"] select {
+  background: var(--superficie);
+  color: var(--escuro);
+}
+html[data-tema="escuro"] .cal-tem { background: #1e3a5f; }
+html[data-tema="escuro"] .add-btn { background: #2d2410; }
+html[data-tema="escuro"] .add-btn:hover { background: #3a2f14; }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html { -webkit-text-size-adjust: 100%; }
 body {
@@ -45,7 +66,7 @@ body {
 h1, h2, h3 { font-family: "Manrope", "Inter", sans-serif; letter-spacing: -0.01em; }
 .container { max-width: 480px; margin: 0 auto; padding: 20px 16px calc(96px + env(safe-area-inset-bottom)); }
 @media (min-width: 700px) { .container { max-width: 620px; } }
-.card { background: #fff; border: 1px solid var(--cinza-linha); border-radius: 16px; padding: 20px; margin-bottom: 14px; box-shadow: var(--sombra); }
+.card { background: var(--superficie); border: 1px solid var(--cinza-linha); border-radius: 16px; padding: 20px; margin-bottom: 14px; box-shadow: var(--sombra); }
 h2, h3 { color: var(--escuro); margin-top: 0; }
 h2 { font-weight: 800; }
 h3 { font-weight: 800; font-size: 16px; }
@@ -53,7 +74,7 @@ label { display: block; font-size: 12.5px; font-weight: 600; margin: 12px 0 5px;
 label:first-child { margin-top: 0; }
 input, select {
   width: 100%; padding: 11px 13px; border: 1.5px solid var(--cinza-linha);
-  border-radius: 10px; font-size: 15px; color: var(--escuro); background: #fff;
+  border-radius: 10px; font-size: 15px; color: var(--escuro); background: var(--superficie);
   font-family: inherit; transition: border-color .15s, box-shadow .15s;
 }
 input:focus, select:focus { outline: none; border-color: var(--azul); box-shadow: 0 0 0 3px var(--azul-tinta); }
@@ -65,7 +86,7 @@ input:focus, select:focus { outline: none; border-color: var(--azul); box-shadow
 }
 .btn:hover { box-shadow: 0 6px 18px rgba(37,99,235,.36); }
 .btn:active { transform: scale(.98); }
-.btn-secundario { background: #fff; color: var(--azul); border: 1.5px solid var(--cinza-linha); box-shadow: none; }
+.btn-secundario { background: var(--superficie); color: var(--azul); border: 1.5px solid var(--cinza-linha); box-shadow: none; }
 .btn-secundario:hover { background: var(--azul-tinta); border-color: var(--azul); box-shadow: none; }
 .btn-ambar { background: var(--ambar); color: #1a1200; box-shadow: 0 4px 14px rgba(245,158,11,.3); }
 .btn-ambar:hover { filter: brightness(1.03); box-shadow: 0 6px 18px rgba(245,158,11,.38); }
@@ -76,7 +97,7 @@ input:focus, select:focus { outline: none; border-color: var(--azul); box-shadow
 /* Navegação inferior fixa */
 .tabs {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
-  display: flex; background: #fff; border-top: 1px solid var(--cinza-linha);
+  display: flex; background: var(--superficie); border-top: 1px solid var(--cinza-linha);
   box-shadow: 0 -4px 20px rgba(15,23,42,.06);
   padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
 }
@@ -111,7 +132,7 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
 .item-header { display: flex; justify-content: space-between; align-items: center; }
 .item-header span { font-size: 13px; font-weight: 700; color: var(--azul-escuro); }
 .remove-btn {
-  background: #fff; border: 1px solid var(--cinza-linha); color: var(--cinza-texto);
+  background: var(--superficie); border: 1px solid var(--cinza-linha); color: var(--cinza-texto);
   border-radius: 8px; width: 28px; height: 28px; font-size: 13px; cursor: pointer;
 }
 .remove-btn:hover { color: var(--erro); border-color: var(--erro); }
@@ -139,27 +160,27 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
 .hidden { display: none !important; }
 
 /* Proposta cliente */
-.proposal { background: #fff; color: #0f172a; border-radius: 18px; overflow: hidden; border: 1px solid var(--cinza-linha); box-shadow: var(--sombra); }
+.proposal { background: #ffffff; color: #0f172a; border-radius: 18px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: var(--sombra); }
 .proposal-header { background: var(--gradiente); padding: 24px 20px; color: #fff; }
 .proposal-header .brand { font-size: 21px; font-weight: 800; font-family: "Manrope", sans-serif; }
 .proposal-header .tagline { font-size: 12px; color: #e0f2fe; margin-top: 2px; }
 .proposal-numero { font-size: 11px; color: #d6f0fa; margin-top: 6px; }
 .proposal-meta { padding: 16px 20px 4px; }
 .proposal-items { padding: 6px 20px 4px; }
-.proposal-item { padding: 12px 0; border-bottom: 1px solid var(--cinza-linha); }
-.proposal-item .titulo { font-weight: 700; font-size: 14px; }
-.proposal-item .detalhe { font-size: 12px; color: var(--cinza-texto); margin-top: 2px; }
+.proposal-item { padding: 12px 0; border-bottom: 1px solid #e2e8f0; }
+.proposal-item .titulo { font-weight: 700; font-size: 14px; color: #0f172a; }
+.proposal-item .detalhe { font-size: 12px; color: #64748b; margin-top: 2px; }
 .proposal-item .preco { font-weight: 700; color: var(--azul); font-size: 14px; margin-top: 6px; text-align: right; }
-.proposal-total { margin: 10px 20px 0; padding: 16px; border-radius: 14px; background: var(--escuro); color: #fff; display: flex; justify-content: space-between; align-items: center; }
+.proposal-total { margin: 10px 20px 0; padding: 16px; border-radius: 14px; background: #0f172a; color: #fff; display: flex; justify-content: space-between; align-items: center; }
 .proposal-total .lbl { font-size: 12px; color: #cbd5e1; text-transform: uppercase; font-weight: 600; }
 .proposal-total .val { font-size: 22px; font-weight: 800; color: var(--ambar); font-family: "Manrope", sans-serif; }
 .proposal-total-desconto { margin: 8px 20px 0; padding: 16px; border-radius: 14px; background: var(--sucesso); color: #fff; display: flex; justify-content: space-between; align-items: center; }
 .proposal-total-desconto .lbl { font-size: 12px; color: #dcfce7; text-transform: uppercase; font-weight: 600; }
 .proposal-total-desconto .val { font-size: 22px; font-weight: 800; color: #fff; font-family: "Manrope", sans-serif; }
-.proposal-condicoes { margin: 16px 20px 0; padding: 14px 16px; border-radius: 12px; background: var(--cinza-claro); border: 1px solid var(--cinza-linha); font-size: 11.5px; color: #475569; line-height: 1.6; }
-.proposal-condicoes b { display: block; color: var(--escuro); font-size: 12.5px; margin-bottom: 4px; }
-.proposal-footer { padding: 16px 20px 4px; font-size: 11px; color: var(--cinza-texto); line-height: 1.5; }
-.proposal-marca { padding: 10px 20px 18px; font-size: 10px; color: #94a3b8; text-align: center; border-top: 1px solid var(--cinza-linha); margin-top: 4px; }
+.proposal-condicoes { margin: 16px 20px 0; padding: 14px 16px; border-radius: 12px; background: #f8fafc; border: 1px solid #e2e8f0; font-size: 11.5px; color: #475569; line-height: 1.6; }
+.proposal-condicoes b { display: block; color: #0f172a; font-size: 12.5px; margin-bottom: 4px; }
+.proposal-footer { padding: 16px 20px 4px; font-size: 11px; color: #64748b; line-height: 1.5; }
+.proposal-marca { padding: 10px 20px 18px; font-size: 10px; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0; margin-top: 4px; }
 .action-row { display: flex; gap: 8px; margin-top: 14px; }
 .action-row button { flex: 1; }
 #whatsappText { width: 100%; min-height: 90px; margin-top: 10px; padding: 10px; border-radius: 10px; border: 1px solid var(--cinza-linha); font-size: 12px; font-family: inherit; }
@@ -168,7 +189,7 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
 
 /* Clientes / Agenda */
 .lista-item {
-  background: #fff; border: 1px solid var(--cinza-linha); border-radius: 14px;
+  background: var(--superficie); border: 1px solid var(--cinza-linha); border-radius: 14px;
   padding: 13px 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
   transition: border-color .15s, box-shadow .15s;
 }
@@ -178,7 +199,7 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
 .lista-item .sub-item { font-size: 12.5px; color: var(--cinza-texto); margin-top: 2px; }
 .lista-item .acoes { display: flex; gap: 6px; }
 .icon-btn {
-  background: #fff; border: 1px solid var(--cinza-linha); color: var(--cinza-texto);
+  background: var(--superficie); border: 1px solid var(--cinza-linha); color: var(--cinza-texto);
   border-radius: 8px; width: 30px; height: 30px; font-size: 13px; cursor: pointer; flex-shrink: 0;
 }
 .icon-btn:hover { color: var(--azul); border-color: var(--azul); }
@@ -221,7 +242,7 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
 .atalho-btn svg { width: 20px; height: 20px; }
 .atalho-btn span { font-size: 12.5px; font-weight: 700; }
 .atalho-primario { background: var(--gradiente); color: #fff; box-shadow: 0 6px 18px rgba(37,99,235,.28); }
-.atalho-secundario { background: #fff; color: var(--azul); border: 1.5px solid var(--cinza-linha) !important; }
+.atalho-secundario { background: var(--superficie); color: var(--azul); border: 1.5px solid var(--cinza-linha) !important; }
 .kanban-secao { margin-bottom: 16px; }
 .kanban-secao:last-child { margin-bottom: 0; }
 .kanban-cabecalho { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
@@ -315,7 +336,7 @@ async function iniciar() {
     if (!empresa) {
       const { data: novaEmpresa, error: erroCriacao } = await supabaseClient
         .from("empresas")
-        .insert({ user_id: session.user.id, nome_empresa: "Minha Empresa", plano: "basico", precos: { config: VALORES_PADRAO, dadosEmpresa: DADOS_EMPRESA_PADRAO } })
+        .insert({ user_id: session.user.id, nome_empresa: "Minha Empresa", plano: "gratis", precos: { config: VALORES_PADRAO, dadosEmpresa: DADOS_EMPRESA_PADRAO } })
         .select().single();
       if (erroCriacao) throw erroCriacao;
       empresa = novaEmpresa;
@@ -326,7 +347,7 @@ async function iniciar() {
 
     empresaAtual = empresa;
     document.getElementById("nomeEmpresa").textContent = empresaAtual.nome_empresa;
-    document.getElementById("badgePlano").textContent = empresaAtual.plano === "completo" ? "Plano Completo" : "Plano Básico";
+    document.getElementById("badgePlano").textContent = { completo: "Plano Completo", basico: "Plano Básico" }[planoEfetivo()] || "Plano Grátis";
     mostrarAba("inicio");
   } catch (e) {
     document.getElementById("conteudo").innerHTML = '<div class="card"><p class="msg erro">Não foi possível carregar: ' + e.message + '</p></div>';
@@ -382,12 +403,21 @@ function mostrarAba(nome) {
         <div id="statusAssinatura"><p class="vazio">Carregando...</p></div>
       </div>
       <div class="card">
+        <h3>Aparência</h3>
+        <div class="checkbox-row" style="margin-top:0;">
+          <input type="checkbox" id="chkTemaEscuro">
+          <label>Tema escuro</label>
+        </div>
+      </div>
+      <div class="card">
         <h3>Sessão</h3>
         <button class="btn btn-secundario" onclick="sair()" style="color:var(--erro); border-color:var(--erro);">Sair da conta</button>
       </div>`;
     carregarStatusGoogle();
     renderStatusAssinatura();
     document.getElementById('btnVincularGoogle').addEventListener('click', vincularGoogle);
+    document.getElementById('chkTemaEscuro').checked = localStorage.getItem(TEMA_ESCURO_KEY) === '1';
+    document.getElementById('chkTemaEscuro').addEventListener('change', (e) => aplicarTema(e.target.checked));
   }
 }
 
@@ -417,6 +447,21 @@ async function vincularGoogle() {
 }
 
 const PLANO_PRECOS = { basico: { mensal: 29.90, anual: 299.00 }, completo: { mensal: 79.90, anual: 799.00 } };
+
+const TABELA_PLANOS = [
+  { nome: 'Clientes', gratis: 'Até 10', basico: 'Ilimitado', completo: 'Ilimitado' },
+  { nome: 'Orçamentos', gratis: true, basico: true, completo: true },
+  { nome: 'Clientes e Agenda', gratis: true, basico: true, completo: true },
+  { nome: 'Ordens de Serviço', gratis: true, basico: true, completo: true },
+  { nome: 'Financeiro na Início', gratis: true, basico: true, completo: true },
+  { nome: 'Contratos de manutenção (PMOC)', gratis: false, basico: false, completo: true },
+];
+
+function celulaPlano(valor) {
+  if (valor === true) return '<span style="color:var(--sucesso); font-weight:800;">✓</span>';
+  if (valor === false) return '<span style="color:var(--cinza-texto);">✗</span>';
+  return `<span style="font-weight:700; font-size:11.5px;">${valor}</span>`;
+}
 const ASSINATURA_STATUS_LABEL = { trial: 'Sem assinatura ativa', pendente: 'Pagamento pendente', ativa: 'Ativa', atrasada: 'Pagamento atrasado', cancelada: 'Cancelada' };
 
 function renderStatusAssinatura() {
@@ -434,12 +479,36 @@ function renderStatusAssinatura() {
   const statusAtual = empresaAtual.assinatura_status || 'trial';
   const statusLabel = ASSINATURA_STATUS_LABEL[statusAtual] || statusAtual;
   const corStatus = statusAtual === 'ativa' ? 'concluido' : (statusAtual === 'atrasada' || statusAtual === 'cancelada' ? 'cancelado' : 'agendado');
+  const nomePlanoAtual = { completo: 'Plano Completo', basico: 'Plano Básico' }[empresaAtual.plano] || 'Plano Grátis';
 
   el.innerHTML = `
     <div style="margin-bottom:14px;">
-      <span class="badge-plano">${empresaAtual.plano === 'completo' ? 'Plano Completo' : 'Plano Básico'}</span>
-      <span class="status-tag status-${corStatus}" style="margin-left:6px;">${statusLabel}</span>
+      <span class="badge-plano">${nomePlanoAtual}</span>
+      ${empresaAtual.plano !== 'gratis' ? `<span class="status-tag status-${corStatus}" style="margin-left:6px;">${statusLabel}</span>` : ''}
       ${empresaAtual.assinatura_expira_em ? `<div class="sub-item" style="margin-top:6px;">Válido até ${new Date(empresaAtual.assinatura_expira_em).toLocaleDateString('pt-BR')}</div>` : ''}
+    </div>
+
+    <div style="overflow-x:auto; margin-bottom:16px;">
+      <table style="width:100%; border-collapse:collapse; font-size:12px; min-width:420px;">
+        <thead>
+          <tr>
+            <th style="text-align:left; padding:8px 6px; color:var(--cinza-texto); font-weight:600;"></th>
+            <th style="text-align:center; padding:8px 6px; font-family:'Manrope',sans-serif; font-weight:800;">Grátis</th>
+            <th style="text-align:center; padding:8px 6px; font-family:'Manrope',sans-serif; font-weight:800;">Básico</th>
+            <th style="text-align:center; padding:8px 6px; font-family:'Manrope',sans-serif; font-weight:800; color:var(--azul-escuro);">Completo</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${TABELA_PLANOS.map(linha => `
+            <tr style="border-top:1px solid var(--cinza-linha);">
+              <td style="padding:8px 6px; color:var(--escuro);">${linha.nome}</td>
+              <td style="text-align:center; padding:8px 6px;">${celulaPlano(linha.gratis)}</td>
+              <td style="text-align:center; padding:8px 6px;">${celulaPlano(linha.basico)}</td>
+              <td style="text-align:center; padding:8px 6px;">${celulaPlano(linha.completo)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
     </div>
 
     <label>Ciclo de cobrança</label>
@@ -544,6 +613,12 @@ async function salvarDadosEmpresa() {
 /* ===================== INÍCIO (DASHBOARD) ===================== */
 
 const FINANCEIRO_OCULTO_KEY = 'estelar_financeiro_oculto';
+const TEMA_ESCURO_KEY = 'estelar_tema_escuro';
+
+function aplicarTema(escuro) {
+  document.documentElement.setAttribute('data-tema', escuro ? 'escuro' : 'claro');
+  localStorage.setItem(TEMA_ESCURO_KEY, escuro ? '1' : '0');
+}
 
 function osKanbanColuna(itens) {
   if (!itens.length) return '<p class="vazio" style="padding:10px 0;">Nada por aqui.</p>';
@@ -780,6 +855,7 @@ let clientesCache = [];
 async function renderClientes() {
   const conteudo = document.getElementById("conteudo");
   conteudo.innerHTML = `
+    <div id="clAvisoLimite"></div>
     <button class="btn" id="clAbrirFormBtn">+ Novo cliente</button>
     <div class="card hidden" id="clFormCard">
       <h3>Novo cliente</h3>
@@ -816,11 +892,50 @@ async function renderClientes() {
   await clCarregarLista();
 }
 
+const LIMITE_CLIENTES_GRATIS = 10;
+const AVISO_CLIENTES_GRATIS = 8;
+
+function planoEfetivo() {
+  if (empresaAtual.cortesia) return 'completo';
+  return empresaAtual.plano || 'gratis';
+}
+
+function atualizarAvisoLimiteClientes() {
+  const avisoEl = document.getElementById('clAvisoLimite');
+  const formBtn = document.getElementById('clAbrirFormBtn');
+  if (!avisoEl) return;
+
+  if (planoEfetivo() !== 'gratis') { avisoEl.innerHTML = ''; if (formBtn) formBtn.classList.remove('hidden'); return; }
+
+  const total = clientesCache.length;
+  if (total >= LIMITE_CLIENTES_GRATIS) {
+    avisoEl.innerHTML = `
+      <div class="card" style="border-color:var(--erro); background:#fef2f2;">
+        <b style="color:#b91c1c;">Limite do plano grátis atingido (${LIMITE_CLIENTES_GRATIS} clientes)</b>
+        <p class="note" style="margin-top:6px;">Pra cadastrar novos clientes, assine o Básico ou o Completo.</p>
+        <button class="btn" onclick="mostrarAba('config')">Ver planos</button>
+      </div>`;
+    if (formBtn) formBtn.classList.add('hidden');
+  } else if (total >= AVISO_CLIENTES_GRATIS) {
+    avisoEl.innerHTML = `
+      <div class="card" style="border-color:var(--ambar); background:#fffbeb;">
+        <b style="color:var(--ambar-escuro);">Você já tem ${total} de ${LIMITE_CLIENTES_GRATIS} clientes do plano grátis</b>
+        <p class="note" style="margin-top:6px;">Quando atingir o limite, não vai dar pra cadastrar clientes novos. Que tal assinar o Básico ou o Completo?</p>
+        <button class="btn btn-secundario" onclick="mostrarAba('config')">Ver planos</button>
+      </div>`;
+    if (formBtn) formBtn.classList.remove('hidden');
+  } else {
+    avisoEl.innerHTML = '';
+    if (formBtn) formBtn.classList.remove('hidden');
+  }
+}
+
 async function clCarregarLista() {
   const { data, error } = await supabaseClient.from("clientes").select("*").eq("empresa_id", empresaAtual.id).order("nome");
   if (error) { document.getElementById("clLista").innerHTML = '<p class="msg erro">Erro ao carregar clientes.</p>'; return; }
   clientesCache = data;
   clRenderLista('');
+  atualizarAvisoLimiteClientes();
 }
 
 function clRenderLista(termo) {
@@ -1114,6 +1229,11 @@ async function clSalvarNovo() {
   const nome = document.getElementById('clNome').value.trim();
   const msg = document.getElementById('clMsg');
   if (!nome) { msg.className = 'msg erro'; msg.textContent = 'Digite o nome do cliente.'; return; }
+  if (planoEfetivo() === 'gratis' && clientesCache.length >= LIMITE_CLIENTES_GRATIS) {
+    msg.className = 'msg erro';
+    msg.textContent = `O plano grátis permite até ${LIMITE_CLIENTES_GRATIS} clientes. Assine o Básico ou o Completo pra continuar cadastrando.`;
+    return;
+  }
   const { error } = await supabaseClient.from('clientes').insert({
     empresa_id: empresaAtual.id,
     nome,
