@@ -77,19 +77,28 @@ export async function assinarPlano(plano){
     msg.className = 'msg erro'; msg.textContent = 'Digite um CPF ou CNPJ válido.'; return;
   }
   msg.className = 'msg'; msg.textContent = 'Gerando cobrança...';
-  const { data: { session } } = await supabaseClient.auth.getSession();
   try {
-    const resp = await fetch('https://lkankciqsldutuncuvyl.supabase.co/functions/v1/asaas-checkout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
-      body: JSON.stringify({ plano, ciclo, cpfCnpj, nome: window.empresaAtual?.nome_empresa || 'Cliente', email: session.user.email })
+    const { data, error } = await supabaseClient.functions.invoke('asaas-checkout', {
+      body: { plano, ciclo, cpfCnpj, nome: window.empresaAtual?.nome_empresa || 'Cliente', email: (await supabaseClient.auth.getUser()).data.user?.email }
     });
-    const data = await resp.json();
-    if (!resp.ok || data.error){
+    
+    if (error){
       msg.className = 'msg erro';
-      msg.textContent = 'Erro: ' + (data.error || 'não foi possível gerar') + (data.detalhe ? ' — ' + JSON.stringify(data.detalhe).substring(0,300) : '');
+      msg.textContent = 'Erro: ' + error.message;
       return;
     }
-    if (data.invoiceUrl){ window.open(data.invoiceUrl, '_blank'); msg.className = 'msg ok'; msg.textContent = 'Link aberto em nova aba.'; }
-  } catch (e){ msg.className = 'msg erro'; msg.textContent = 'Erro: ' + e.message; }
+    if (data?.error){
+      msg.className = 'msg erro';
+      msg.textContent = 'Erro: ' + data.error + (data.detalhe ? ' — ' + JSON.stringify(data.detalhe).substring(0,300) : '');
+      return;
+    }
+    if (data?.invoiceUrl){
+      window.open(data.invoiceUrl, '_blank');
+      msg.className = 'msg ok'; msg.textContent = 'Link aberto em nova aba.';
+    } else {
+      msg.className = 'msg erro'; msg.textContent = 'Não retornou link de pagamento.';
+    }
+  } catch (e){
+    msg.className = 'msg erro'; msg.textContent = 'Erro de conexão: ' + e.message;
+  }
 }
