@@ -2493,4 +2493,24 @@ function ctMontarContrato() {
   document.getElementById('ctContratoView').classList.remove('hidden');
 }
 
+
+// === FIX: expor funções para onclick do HTML ===
+try {
+  const _expor = { sair, iniciar, mostrarAba, salvarDadosEmpresa, carregarStatusGoogle, vincularGoogle,
+    renderInicio, irParaNovoClienteAtalho, irParaNovaOS, renderClientes, clCarregarLista, clVerDetalhes,
+    clSalvarEdicao, clExcluir, clSalvarNovo, clVerOrcamento, orcExcluir, irParaFichaCliente, clAbrirAgendaItem,
+    osAbrirComContexto, clExcluir, renderAgenda, agSalvarNovo, agAtualizarStatus, agAtualizarDinamico, irParaKanbanOS,
+    agRenderKanban, cpSalvar, cpExcluir, agRenderCalendario, agRenderDia, voltarDoOS, osCriarCompromissoVinculado,
+    osConfirmarAgendamento, osSalvar, osExcluir, renderAvulso, avSalvarOrcamento, avSalvarConfig, novoItemAvulso,
+    renderContrato, ctSalvarContrato, ctExcluirContrato, ctNovoEquip };
+  Object.entries(_expor).forEach(([k,v])=>{ if(typeof v==='function') window[k]=v; });
+  window.empresaAtual = empresaAtual;
+  // keep empresaAtual updated via getter
+  Object.defineProperty(window, 'empresaAtual', { get: ()=> empresaAtual, set: (v)=>{ empresaAtual=v; } });
+} catch(e){ console.warn('expor falhou', e); }
+
+window.sair = sair;
+window.salvarDadosEmpresa = salvarDadosEmpresa;
+
+
 iniciar();
