@@ -110,6 +110,19 @@ function mostrarAba(nome) {
         <div id="statusAssinatura"><p class="vazio">Carregando...</p></div>
       </div>
       <div class="card">
+        <h3>Cobrança de clientes (PIX)</h3>
+        ${temAcessoCompleto() ? `
+        <p class="note" style="margin-top:-6px;">Cadastre sua própria chave de API do Asaas pra gerar cobranças PIX pros seus clientes direto pelas Ordens de Serviço. O dinheiro cai na sua conta Asaas, não passa pelo Cosmos Pro.</p>
+        <label>Chave de API do Asaas (Integrações → Chaves de API, no seu painel Asaas)</label>
+        <input type="password" id="cfgAsaasKeyCliente" placeholder="$aact_..." value="${esc(empresaAtual.asaas_api_key_cliente || '')}">
+        <button class="btn btn-secundario" id="btnSalvarAsaasKeyCliente" style="margin-top:10px;">Salvar chave</button>
+        <div class="msg" id="msgAsaasKeyCliente"></div>
+        ` : `
+        <p class="note" style="margin-top:-6px;">Gere cobranças PIX pros seus clientes direto pelas Ordens de Serviço. Recurso exclusivo do Plano Completo.</p>
+        <span class="badge-plano">Plano Completo</span>
+        `}
+      </div>
+      <div class="card">
         <h3>Aparência</h3>
         <div class="checkbox-row" style="margin-top:0;">
           <input type="checkbox" id="chkTemaEscuro">
@@ -125,7 +138,17 @@ function mostrarAba(nome) {
     document.getElementById('btnVincularGoogle').addEventListener('click', vincularGoogle);
     document.getElementById('chkTemaEscuro').checked = localStorage.getItem(TEMA_ESCURO_KEY) === '1';
     document.getElementById('chkTemaEscuro').addEventListener('change', (e) => aplicarTema(e.target.checked));
+    document.getElementById('btnSalvarAsaasKeyCliente')?.addEventListener('click', salvarAsaasKeyCliente);
   }
+}
+
+async function salvarAsaasKeyCliente() {
+  const msg = document.getElementById('msgAsaasKeyCliente');
+  const chave = document.getElementById('cfgAsaasKeyCliente').value.trim();
+  const { error } = await supabaseClient.from('empresas').update({ asaas_api_key_cliente: chave || null }).eq('id', empresaAtual.id);
+  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar.'; return; }
+  empresaAtual.asaas_api_key_cliente = chave || null;
+  msg.className = 'msg ok'; msg.textContent = 'Salvo!';
 }
 
 async function carregarStatusGoogle() {
@@ -1319,7 +1342,7 @@ async function agRenderOS(card) {
   }
 
   if (osContexto.orcamentoId) {
-    const { data: orc } = await supabaseClient.from('orcamentos').select('*, clientes(nome,telefone,endereco)').eq('id', osContexto.orcamentoId).maybeSingle();
+    const { data: orc } = await supabaseClient.from('orcamentos').select('*, clientes(nome,telefone,endereco,cpf_cnpj)').eq('id', osContexto.orcamentoId).maybeSingle();
     if (orc) {
       clienteInfo = orc.clientes; clienteId = orc.cliente_id;
       origemLabel = esc((orc.dados && orc.dados.numero) || 'Orçamento avulso');
@@ -1333,7 +1356,7 @@ async function agRenderOS(card) {
       if (!osExistente) { const { data: os } = await supabaseClient.from('ordens_servico').select('*').eq('orcamento_id', osContexto.orcamentoId).maybeSingle(); osExistente = os; }
     }
   } else if (osContexto.contratoId) {
-    const { data: ctr } = await supabaseClient.from('contratos').select('*, clientes(nome,telefone,endereco)').eq('id', osContexto.contratoId).maybeSingle();
+    const { data: ctr } = await supabaseClient.from('contratos').select('*, clientes(nome,telefone,endereco,cpf_cnpj)').eq('id', osContexto.contratoId).maybeSingle();
     if (ctr) {
       clienteInfo = ctr.clientes; clienteId = ctr.cliente_id;
       origemLabel = 'Contrato de manutenção';
@@ -1349,7 +1372,7 @@ async function agRenderOS(card) {
 
   if (!clienteId && osContexto.clienteId) clienteId = osContexto.clienteId;
   if (!clienteInfo && clienteId) {
-    const { data: cli } = await supabaseClient.from('clientes').select('nome,telefone,endereco').eq('id', clienteId).maybeSingle();
+    const { data: cli } = await supabaseClient.from('clientes').select('nome,telefone,endereco,cpf_cnpj').eq('id', clienteId).maybeSingle();
     clienteInfo = cli;
   }
   osContexto.clienteId = clienteId;
@@ -1416,6 +1439,7 @@ async function agRenderOS(card) {
       <div class="msg" id="osMsg"></div>
       ${osExistente ? `<button class="btn btn-secundario" id="osExcluirBtn" style="color:var(--erro); border-color:var(--erro); margin-top:10px;">Excluir esta OS</button>` : ''}
     </div>
+    ${osExistente && !osExistente.pago ? osCobrancaPixHtml(osExistente, clienteInfo) : ''}
     ${osExistente ? (osContexto.agendaId ? `
     <div class="card" id="osAgendamentoCard">
       <h3 style="font-size:15px;">Agendamento</h3>
@@ -1439,6 +1463,7 @@ async function agRenderOS(card) {
   document.getElementById('osSalvarBtn').addEventListener('click', () => osSalvar(osExistente ? osExistente.id : null));
   document.getElementById('osExcluirBtn')?.addEventListener('click', () => osExcluir(osExistente.id));
   document.getElementById('osConfirmarAgendaBtn')?.addEventListener('click', () => osConfirmarAgendamento(osExistente.id));
+  if (osExistente && !osExistente.pago) ligarEventosCobrancaPix(osExistente, clienteInfo);
 
   if (osExistente && osContexto.agendaId) {
     const { data: ag } = await supabaseClient.from('agenda').select('data_hora,status').eq('id', osContexto.agendaId).maybeSingle();
@@ -1455,6 +1480,82 @@ async function agRenderOS(card) {
         agAtualizarDinamico();
       });
     }
+  }
+}
+
+function osCobrancaPixHtml(osExistente, clienteInfo) {
+  if (!temAcessoCompleto()) {
+    return `<div class="card">
+      <h3 style="font-size:15px;">Cobrança PIX</h3>
+      <p class="note" style="margin-top:-4px;">Gere cobranças PIX pros seus clientes direto por aqui. Recurso exclusivo do Plano Completo.</p>
+    </div>`;
+  }
+  if (!empresaAtual.asaas_api_key_cliente) {
+    return `<div class="card">
+      <h3 style="font-size:15px;">Cobrança PIX</h3>
+      <p class="note" style="margin-top:-4px;">Pra gerar cobranças PIX direto pros seus clientes por aqui, cadastre sua chave de API do Asaas em Ajustes → Cobrança de clientes.</p>
+    </div>`;
+  }
+  if (osExistente.pix_invoice_url) {
+    return `<div class="card" id="osCobrancaPixCard">
+      <h3 style="font-size:15px;">Cobrança PIX</h3>
+      <p class="sub-item">Cobrança já gerada pra este serviço.</p>
+      <div style="display:grid; gap:8px; margin-top:8px;">
+        <button class="btn btn-secundario" id="osAbrirCobrancaBtn">Abrir cobrança</button>
+        <button class="btn btn-secundario" id="osCopiarPixBtn">Copiar código PIX (copia e cola)</button>
+        <button class="btn btn-secundario" id="osNovaCobrancaBtn">Gerar nova cobrança</button>
+      </div>
+      <div class="msg" id="osPixMsg"></div>
+    </div>`;
+  }
+  return `<div class="card" id="osCobrancaPixCard">
+    <h3 style="font-size:15px;">Cobrança PIX</h3>
+    <p class="note" style="margin-top:-4px;">Gera um link e código PIX pra mandar pro cliente pagar este serviço direto na sua conta Asaas.</p>
+    <label>CPF ou CNPJ do cliente</label>
+    <input type="text" id="osPixCpfCnpj" placeholder="000.000.000-00" value="${esc((clienteInfo && clienteInfo.cpf_cnpj) || '')}">
+    <button class="btn btn-ambar" id="osGerarCobrancaBtn" style="margin-top:10px;">Gerar cobrança PIX</button>
+    <div class="msg" id="osPixMsg"></div>
+  </div>`;
+}
+
+function ligarEventosCobrancaPix(osExistente, clienteInfo) {
+  document.getElementById('osGerarCobrancaBtn')?.addEventListener('click', () => osGerarCobrancaPix(osExistente.id));
+  document.getElementById('osNovaCobrancaBtn')?.addEventListener('click', () => osGerarCobrancaPix(osExistente.id, true));
+  document.getElementById('osAbrirCobrancaBtn')?.addEventListener('click', () => window.open(osExistente.pix_invoice_url, '_blank'));
+  document.getElementById('osCopiarPixBtn')?.addEventListener('click', () => {
+    const ta = document.createElement('textarea');
+    ta.value = osExistente.pix_copia_cola || osExistente.pix_invoice_url;
+    document.body.appendChild(ta); ta.select();
+    try { navigator.clipboard.writeText(ta.value); } catch (e) { try { document.execCommand('copy'); } catch (e2) {} }
+    document.body.removeChild(ta);
+    const msg = document.getElementById('osPixMsg');
+    msg.className = 'msg ok'; msg.textContent = 'Copiado!';
+  });
+}
+
+async function osGerarCobrancaPix(osId, forcarNova) {
+  const msg = document.getElementById('osPixMsg');
+  const cpfCnpjEl = document.getElementById('osPixCpfCnpj');
+  const cpfCnpj = cpfCnpjEl ? cpfCnpjEl.value.replace(/[^\d]/g, '') : null;
+  if (!forcarNova && cpfCnpjEl && (!cpfCnpj || (cpfCnpj.length !== 11 && cpfCnpj.length !== 14))) {
+    msg.className = 'msg erro'; msg.textContent = 'Digite um CPF ou CNPJ válido.'; return;
+  }
+  msg.className = 'msg'; msg.textContent = 'Gerando cobrança...';
+  try {
+    const { data, error } = await supabaseClient.functions.invoke('criar-cobranca-cliente', {
+      body: { osId, cpfCnpj: cpfCnpj || undefined }
+    });
+    if (error) {
+      let corpo = null;
+      try { corpo = await error.context?.json(); } catch (_) {}
+      msg.className = 'msg erro'; msg.textContent = 'Erro: ' + (corpo?.error || error.message);
+      return;
+    }
+    if (data?.error) { msg.className = 'msg erro'; msg.textContent = 'Erro: ' + data.error; return; }
+    msg.className = 'msg ok'; msg.textContent = 'Cobrança gerada!';
+    setTimeout(() => agAtualizarDinamico(), 600);
+  } catch (e) {
+    msg.className = 'msg erro'; msg.textContent = 'Erro de conexão: ' + e.message;
   }
 }
 
