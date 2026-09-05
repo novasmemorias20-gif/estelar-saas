@@ -45,6 +45,8 @@ export function renderStatusAssinatura(){
     </div>
     <label>Ciclo de cobrança</label>
     <select id="assinaturaCiclo"><option value="mensal">Mensal</option><option value="anual">Anual (2 meses grátis)</option></select>
+    <label>Forma de pagamento</label>
+    <select id="assinaturaMetodo"><option value="pix">PIX (cobrança recorrente por e-mail a cada ciclo)</option><option value="cartao">Cartão de crédito (cobrança automática)</option></select>
     <label>CPF ou CNPJ (exigido pelo Asaas pra gerar a cobrança)</label>
     <input type="text" id="assinaturaCpfCnpj" placeholder="000.000.000-00" value="${esc((empresaAtual.precos.dadosEmpresa && empresaAtual.precos.dadosEmpresa.cnpj) || '')}">
     <div style="margin-top:14px; gap:10px; display:grid;">
@@ -72,6 +74,7 @@ export function atualizarPrecosExibidos(){
 export async function assinarPlano(plano){
   const msg = document.getElementById('msgAssinatura');
   const ciclo = document.getElementById('assinaturaCiclo').value;
+  const metodoPagamento = document.getElementById('assinaturaMetodo').value;
   const cpfCnpj = document.getElementById('assinaturaCpfCnpj').value.replace(/[^\d]/g, '');
   if (!cpfCnpj || (cpfCnpj.length !== 11 && cpfCnpj.length !== 14)){
     msg.className = 'msg erro'; msg.textContent = 'Digite um CPF ou CNPJ válido.'; return;
@@ -79,12 +82,16 @@ export async function assinarPlano(plano){
   msg.className = 'msg'; msg.textContent = 'Gerando cobrança...';
   try {
     const { data, error } = await supabaseClient.functions.invoke('asaas-checkout', {
-      body: { plano, ciclo, cpfCnpj, nome: window.empresaAtual?.nome_empresa || 'Cliente', email: (await supabaseClient.auth.getUser()).data.user?.email }
+      body: { plano, ciclo, cpfCnpj, metodoPagamento, nome: window.empresaAtual?.nome_empresa || 'Cliente', email: (await supabaseClient.auth.getUser()).data.user?.email }
     });
     
     if (error){
+      // supabase-js não entrega o corpo JSON quando a function retorna status != 2xx;
+      // o corpo real (com o "detalhe" do Asaas) fica em error.context, uma Response crua.
+      let corpo = null;
+      try { corpo = await error.context?.json(); } catch (_) { /* corpo não era JSON */ }
       msg.className = 'msg erro';
-      msg.textContent = 'Erro: ' + error.message;
+      msg.textContent = 'Erro: ' + (corpo?.error || error.message) + (corpo?.detalhe ? ' — ' + JSON.stringify(corpo.detalhe).substring(0,300) : '');
       return;
     }
     if (data?.error){
@@ -95,6 +102,8 @@ export async function assinarPlano(plano){
     if (data?.invoiceUrl){
       window.open(data.invoiceUrl, '_blank');
       msg.className = 'msg ok'; msg.textContent = 'Link aberto em nova aba.';
+    } else if (metodoPagamento === 'pix') {
+      msg.className = 'msg ok'; msg.textContent = 'Assinatura criada! O link de pagamento PIX chega no e-mail cadastrado em instantes.';
     } else {
       msg.className = 'msg erro'; msg.textContent = 'Não retornou link de pagamento.';
     }
