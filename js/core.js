@@ -398,7 +398,7 @@ async function abrirFinanceiroDetalhado(mesOffset = 0, filtro = 'todos') {
   conteudo.innerHTML = '<div class="card"><p class="vazio">Carregando...</p></div>';
 
   const { data: osData } = await supabaseClient.from('ordens_servico')
-    .select('id,status,valor,pago,data_pagamento,descricao,created_at,clientes(nome)')
+    .select('id,status,valor,pago,data_pagamento,descricao,created_at,clientes(nome),agenda(data_hora)')
     .eq('empresa_id', empresaAtual.id)
     .order('created_at', { ascending: false });
   const os = osData || [];
@@ -407,9 +407,11 @@ async function abrirFinanceiroDetalhado(mesOffset = 0, filtro = 'todos') {
   const refMes = new Date(hoje.getFullYear(), hoje.getMonth() + mesOffset, 1);
   const labelMes = refMes.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
   const mesmoMes = (data, ref) => data.getMonth() === ref.getMonth() && data.getFullYear() === ref.getFullYear();
+  // Data de execução do serviço (compromisso vinculado na agenda); se não houver, usa a data de criação da OS
+  const dataExecucaoOS = (o) => o.agenda?.data_hora ? new Date(o.agenda.data_hora) : new Date(o.created_at);
 
   const osDoMes = os.filter(o => {
-    const dataRef = o.pago && o.data_pagamento ? new Date(o.data_pagamento) : new Date(o.created_at);
+    const dataRef = o.pago && o.data_pagamento ? new Date(o.data_pagamento) : dataExecucaoOS(o);
     return mesmoMes(dataRef, refMes);
   });
 
@@ -427,7 +429,7 @@ async function abrirFinanceiroDetalhado(mesOffset = 0, filtro = 'todos') {
   for (let i = 5; i >= 0; i--) {
     const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
     const recebido = os.filter(o => o.pago && o.data_pagamento && mesmoMes(new Date(o.data_pagamento), d)).reduce((s, o) => s + (parseFloat(o.valor) || 0), 0);
-    const aberto = os.filter(o => !o.pago && mesmoMes(new Date(o.created_at), d)).reduce((s, o) => s + (parseFloat(o.valor) || 0), 0);
+    const aberto = os.filter(o => !o.pago && mesmoMes(dataExecucaoOS(o), d)).reduce((s, o) => s + (parseFloat(o.valor) || 0), 0);
     meses.push({ label: d.toLocaleDateString('pt-BR', { month: 'short' }), recebido, aberto });
   }
   const maxValor = Math.max(1, ...meses.map(m => Math.max(m.recebido, m.aberto)));
