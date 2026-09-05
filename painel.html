@@ -247,6 +247,20 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
 .kanban-secao:last-child { margin-bottom: 0; }
 .kanban-cabecalho { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .kanban-cabecalho .contagem { font-size: 12px; color: var(--cinza-texto); font-weight: 700; }
+  /* Cards expansíveis de OS por status */
+.os-status-card { border-radius: 14px; border: 1.5px solid var(--cinza-linha); margin-bottom: 10px; overflow: hidden; }
+.os-status-card:last-child { margin-bottom: 0; }
+.os-status-cabecalho { display: flex; justify-content: space-between; align-items: center; padding: 13px 15px; cursor: pointer; }
+.os-status-info { display: flex; align-items: center; gap: 10px; }
+.os-status-total { font-weight: 800; font-family: "Manrope", sans-serif; font-size: 14px; color: var(--escuro); }
+.os-status-contagem-wrap { display: flex; align-items: center; gap: 6px; color: var(--cinza-texto); }
+.os-status-seta { transition: transform .15s; }
+.os-status-card.aberto .os-status-seta { transform: rotate(180deg); }
+.os-status-corpo { padding: 0 15px 13px; }
+.os-status-azul .os-status-cabecalho { background: var(--azul-tinta); }
+.os-status-ambar .os-status-cabecalho { background: #fef3c7; }
+.os-status-verde .os-status-cabecalho { background: var(--sucesso-bg); }
+
 </style>
 </head>
 <body>
