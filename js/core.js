@@ -202,6 +202,50 @@ function osKanbanSecaoHtml(titulo, cor, itens) {
   </div>`;
 }
 
+function osStatusCardHtml(status, itens) {
+  const config = {
+    aberta: { titulo: 'Aberta', cor: 'azul', tag: 'agendado' },
+    em_andamento: { titulo: 'Em andamento', cor: 'ambar', tag: 'agendado' },
+    concluida: { titulo: 'Concluída', cor: 'verde', tag: 'concluido' }
+  }[status];
+  const total = itens.reduce((s, o) => s + (parseFloat(o.valor) || 0), 0);
+  return `
+    <div class="os-status-card os-status-${config.cor}" data-os-status-card="${status}">
+      <div class="os-status-cabecalho" data-os-status-toggle="${status}">
+        <div class="os-status-info">
+          <span class="status-tag status-${config.tag}">${config.titulo}</span>
+          <span class="os-status-total">${money(total)}</span>
+        </div>
+        <div class="os-status-contagem-wrap">
+          <span class="contagem">${itens.length}</span>
+          <svg class="os-status-seta" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+      </div>
+      <div class="os-status-corpo hidden">
+        ${osKanbanColuna(itens)}
+      </div>
+    </div>`;
+}
+
+function osStatusCardsHtml(osPorStatus) {
+  return `
+    <div class="os-status-lista">
+      ${osStatusCardHtml('aberta', osPorStatus.aberta)}
+      ${osStatusCardHtml('em_andamento', osPorStatus.em_andamento)}
+      ${osStatusCardHtml('concluida', osPorStatus.concluida)}
+    </div>`;
+}
+
+function ligarTogglesOsStatus(container) {
+  container.querySelectorAll('[data-os-status-toggle]').forEach(el => {
+    el.addEventListener('click', () => {
+      const card = el.closest('[data-os-status-card]');
+      card.classList.toggle('aberto');
+      card.querySelector('.os-status-corpo').classList.toggle('hidden');
+    });
+  });
+}
+
 function ligarCliquesKanban(container) {
   container.querySelectorAll('[data-kb-os]').forEach(el => {
     el.addEventListener('click', () => osAbrirComContexto({ osId: el.getAttribute('data-kb-os') }));
@@ -301,19 +345,22 @@ async function renderInicio() {
 
     <div class="card">
       <div class="card-titulo"><div class="card-icon-chip chip-azul"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONE_OS}</svg></div><h3>Ordens de serviço</h3></div>
-      ${osKanbanSecaoHtml('Aberta', 'agendado', osPorStatus.aberta)}
-      ${osKanbanSecaoHtml('Em andamento', 'agendado', osPorStatus.em_andamento)}
-      ${osKanbanSecaoHtml('Concluída', 'concluido', osPorStatus.concluida)}
+      ${osStatusCardsHtml(osPorStatus)}
     </div>
 
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
         <div class="card-titulo" style="margin-bottom:0;"><div class="card-icon-chip chip-verde"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONE_MOEDA}</svg></div><h3>Financeiro</h3></div>
-        <button class="icon-btn" id="btnOcultarFinanceiro" title="Ocultar/mostrar valores">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${oculto
-            ? '<path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.6 18.6 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'
-            : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'}</svg>
-        </button>
+        <div style="display:flex; gap:6px;">
+          <button class="icon-btn" id="btnVerFinanceiroDetalhado" title="Ver detalhes">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>
+          </button>
+          <button class="icon-btn" id="btnOcultarFinanceiro" title="Ocultar/mostrar valores">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${oculto
+              ? '<path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.6 18.6 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'
+              : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'}</svg>
+          </button>
+        </div>
       </div>
       <div id="financeiroConteudo">${financeiroConteudo}</div>
     </div>
@@ -329,12 +376,121 @@ async function renderInicio() {
     localStorage.setItem(FINANCEIRO_OCULTO_KEY, novoEstado);
     renderInicio();
   });
+  document.getElementById('btnVerFinanceiroDetalhado').addEventListener('click', () => abrirFinanceiroDetalhado(0, 'todos'));
   conteudo.querySelectorAll('[data-ir-cliente]').forEach(el => {
     el.addEventListener('click', () => irParaFichaCliente(el.getAttribute('data-ir-cliente')));
   });
   ligarCliquesKanban(conteudo);
+  ligarTogglesOsStatus(conteudo);
   document.getElementById('btnAtalhoNovaOS').addEventListener('click', irParaNovaOS);
   document.getElementById('btnAtalhoNovoCliente').addEventListener('click', irParaNovoClienteAtalho);
+}
+
+const FINANCEIRO_FILTROS = [
+  { chave: 'todos', label: 'Todos' },
+  { chave: 'pago', label: 'Pagas' },
+  { chave: 'a_receber', label: 'A receber' },
+  { chave: 'em_execucao', label: 'Em execução' }
+];
+
+async function abrirFinanceiroDetalhado(mesOffset = 0, filtro = 'todos') {
+  const conteudo = document.getElementById('conteudo');
+  conteudo.innerHTML = '<div class="card"><p class="vazio">Carregando...</p></div>';
+
+  const { data: osData } = await supabaseClient.from('ordens_servico')
+    .select('id,status,valor,pago,data_pagamento,descricao,created_at,clientes(nome)')
+    .eq('empresa_id', empresaAtual.id)
+    .order('created_at', { ascending: false });
+  const os = osData || [];
+
+  const hoje = new Date();
+  const refMes = new Date(hoje.getFullYear(), hoje.getMonth() + mesOffset, 1);
+  const labelMes = refMes.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  const mesmoMes = (data, ref) => data.getMonth() === ref.getMonth() && data.getFullYear() === ref.getFullYear();
+
+  const osDoMes = os.filter(o => {
+    const dataRef = o.pago && o.data_pagamento ? new Date(o.data_pagamento) : new Date(o.created_at);
+    return mesmoMes(dataRef, refMes);
+  });
+
+  const porFiltro = {
+    todos: osDoMes,
+    pago: osDoMes.filter(o => o.pago),
+    a_receber: osDoMes.filter(o => o.status === 'concluida' && !o.pago),
+    em_execucao: osDoMes.filter(o => o.status !== 'concluida')
+  };
+  const listaFiltrada = porFiltro[filtro] || osDoMes;
+  const totalFiltrado = listaFiltrada.reduce((s, o) => s + (parseFloat(o.valor) || 0), 0);
+
+  // Comparativo dos últimos 6 meses (recebido x em aberto)
+  const meses = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+    const recebido = os.filter(o => o.pago && o.data_pagamento && mesmoMes(new Date(o.data_pagamento), d)).reduce((s, o) => s + (parseFloat(o.valor) || 0), 0);
+    const aberto = os.filter(o => !o.pago && mesmoMes(new Date(o.created_at), d)).reduce((s, o) => s + (parseFloat(o.valor) || 0), 0);
+    meses.push({ label: d.toLocaleDateString('pt-BR', { month: 'short' }), recebido, aberto });
+  }
+  const maxValor = Math.max(1, ...meses.map(m => Math.max(m.recebido, m.aberto)));
+
+  const graficoHtml = `
+    <div style="display:flex; align-items:flex-end; gap:8px; height:120px; margin:10px 0 4px;">
+      ${meses.map(m => `
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; height:100%; justify-content:flex-end;">
+          <div style="display:flex; align-items:flex-end; gap:2px; height:100%;">
+            <div title="Recebido: ${money(m.recebido)}" style="width:9px; background:var(--sucesso); border-radius:3px 3px 0 0; height:${Math.max(3, (m.recebido / maxValor) * 100)}%;"></div>
+            <div title="Em aberto: ${money(m.aberto)}" style="width:9px; background:var(--ambar); border-radius:3px 3px 0 0; height:${Math.max(3, (m.aberto / maxValor) * 100)}%;"></div>
+          </div>
+          <span style="font-size:10px; color:var(--cinza-texto); text-transform:capitalize;">${esc(m.label)}</span>
+        </div>
+      `).join('')}
+    </div>
+    <div style="display:flex; gap:14px; justify-content:center; margin-top:6px; font-size:11px; color:var(--cinza-texto);">
+      <span><span style="display:inline-block; width:8px; height:8px; border-radius:2px; background:var(--sucesso); margin-right:4px;"></span>Recebido</span>
+      <span><span style="display:inline-block; width:8px; height:8px; border-radius:2px; background:var(--ambar); margin-right:4px;"></span>Em aberto</span>
+    </div>
+  `;
+
+  const filtroAtual = FINANCEIRO_FILTROS.find(f => f.chave === filtro) || FINANCEIRO_FILTROS[0];
+
+  conteudo.innerHTML = `
+    <div class="topo" style="margin-bottom:14px;">
+      <h2 style="margin:0;">Financeiro</h2>
+    </div>
+    <div class="card">
+      <div class="cal-topo">
+        <button class="icon-btn" id="btnMesAnterior">‹</button>
+        <b style="text-transform:capitalize;">${esc(labelMes)}</b>
+        <button class="icon-btn" id="btnMesProximo" ${mesOffset >= 0 ? 'disabled style="opacity:.3;"' : ''}>›</button>
+      </div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin:14px 0 4px;">
+        ${FINANCEIRO_FILTROS.map(f => `<button class="status-tag" data-filtro="${f.chave}" style="cursor:pointer; border:1.5px solid var(--cinza-linha); background:${f.chave === filtro ? 'var(--azul-tinta)' : 'var(--superficie)'}; color:${f.chave === filtro ? 'var(--azul-escuro)' : 'var(--cinza-texto)'};">${f.label}</button>`).join('')}
+      </div>
+      <div style="margin:14px 0; text-align:center;">
+        <div style="font-size:12px; color:var(--cinza-texto); text-transform:uppercase; font-weight:600;">${filtroAtual.label} em ${esc(labelMes)}</div>
+        <div style="font-size:28px; font-weight:800; font-family:'Manrope',sans-serif; color:var(--escuro);">${money(totalFiltrado)}</div>
+      </div>
+      ${listaFiltrada.length ? listaFiltrada.map(o => `
+        <div class="lista-item" style="cursor:pointer;" data-kb-os="${o.id}">
+          <div class="info">
+            <div class="titulo-item">${esc(o.clientes ? o.clientes.nome : (o.descricao || 'Ordem de serviço'))}</div>
+            <div class="sub-item">${esc(o.descricao || '')} · ${money(o.valor || 0)}</div>
+            ${o.pago ? '<span class="status-tag status-concluido">Pago</span>' : (o.status === 'concluida' ? '<span class="status-tag status-cancelado">A receber</span>' : '<span class="status-tag status-agendado">Em execução</span>')}
+          </div>
+        </div>
+      `).join('') : '<p class="vazio">Nenhuma OS nesse período.</p>'}
+    </div>
+    <div class="card">
+      <div class="card-titulo"><h3>Últimos 6 meses</h3></div>
+      ${graficoHtml}
+    </div>
+    <span class="voltar-link" id="btnVoltarInicio">← Voltar pro Início</span>
+  `;
+
+  document.getElementById('btnMesAnterior').addEventListener('click', () => abrirFinanceiroDetalhado(mesOffset - 1, filtro));
+  if (mesOffset < 0) document.getElementById('btnMesProximo').addEventListener('click', () => abrirFinanceiroDetalhado(mesOffset + 1, filtro));
+  conteudo.querySelectorAll('[data-filtro]').forEach(el => el.addEventListener('click', () => abrirFinanceiroDetalhado(mesOffset, el.getAttribute('data-filtro'))));
+  document.getElementById('btnVoltarInicio').addEventListener('click', renderInicio);
+  ligarCliquesKanban(conteudo);
 }
 
 async function irParaNovoClienteAtalho() {
