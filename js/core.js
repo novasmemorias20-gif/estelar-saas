@@ -32,6 +32,7 @@ async function sair() {
 
 async function iniciar() {
   try {
+    document.documentElement.setAttribute('data-tema', localStorage.getItem(TEMA_ESCURO_KEY) === '1' ? 'escuro' : 'claro');
     const { data: { session }, error: erroSessao } = await supabaseClient.auth.getSession();
     if (erroSessao) throw erroSessao;
     if (!session) { window.location.href = "login.html"; return; }
@@ -152,150 +153,6 @@ async function vincularGoogle() {
   if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao vincular: ' + error.message; }
 }
 
-const PLANO_PRECOS = { basico: { mensal: 29.90, anual: 299.00 }, completo: { mensal: 79.90, anual: 799.00 } };
-
-const TABELA_PLANOS = [
-  { nome: 'Clientes', gratis: 'Até 10', basico: 'Ilimitado', completo: 'Ilimitado' },
-  { nome: 'Orçamentos', gratis: true, basico: true, completo: true },
-  { nome: 'Clientes e Agenda', gratis: true, basico: true, completo: true },
-  { nome: 'Ordens de Serviço', gratis: true, basico: true, completo: true },
-  { nome: 'Financeiro na Início', gratis: true, basico: true, completo: true },
-  { nome: 'Contratos de manutenção (PMOC)', gratis: false, basico: false, completo: true },
-];
-
-function celulaPlano(valor) {
-  if (valor === true) return '<span style="color:var(--sucesso); font-weight:800;">✓</span>';
-  if (valor === false) return '<span style="color:var(--cinza-texto);">✗</span>';
-  return `<span style="font-weight:700; font-size:11.5px;">${valor}</span>`;
-}
-const ASSINATURA_STATUS_LABEL = { trial: 'Sem assinatura ativa', pendente: 'Pagamento pendente', ativa: 'Ativa', atrasada: 'Pagamento atrasado', cancelada: 'Cancelada' };
-
-function renderStatusAssinatura() {
-  const el = document.getElementById('statusAssinatura');
-  if (!el) return;
-
-  if (empresaAtual.cortesia) {
-    el.innerHTML = `
-      <span class="status-tag status-concluido">Acesso cortesia — Completo liberado</span>
-      <p class="note" style="margin-top:10px;">Esta conta tem acesso total sem cobrança.</p>
-    `;
-    return;
-  }
-
-  const statusAtual = empresaAtual.assinatura_status || 'trial';
-  const statusLabel = ASSINATURA_STATUS_LABEL[statusAtual] || statusAtual;
-  const corStatus = statusAtual === 'ativa' ? 'concluido' : (statusAtual === 'atrasada' || statusAtual === 'cancelada' ? 'cancelado' : 'agendado');
-  const nomePlanoAtual = { completo: 'Plano Completo', basico: 'Plano Básico' }[empresaAtual.plano] || 'Plano Grátis';
-
-  el.innerHTML = `
-    <div style="margin-bottom:14px;">
-      <span class="badge-plano">${nomePlanoAtual}</span>
-      ${empresaAtual.plano !== 'gratis' ? `<span class="status-tag status-${corStatus}" style="margin-left:6px;">${statusLabel}</span>` : ''}
-      ${empresaAtual.assinatura_expira_em ? `<div class="sub-item" style="margin-top:6px;">Válido até ${new Date(empresaAtual.assinatura_expira_em).toLocaleDateString('pt-BR')}</div>` : ''}
-    </div>
-
-    <div style="overflow-x:auto; margin-bottom:16px;">
-      <table style="width:100%; border-collapse:collapse; font-size:12px; min-width:420px;">
-        <thead>
-          <tr>
-            <th style="text-align:left; padding:8px 6px; color:var(--cinza-texto); font-weight:600;"></th>
-            <th style="text-align:center; padding:8px 6px; font-family:'Manrope',sans-serif; font-weight:800;">Grátis</th>
-            <th style="text-align:center; padding:8px 6px; font-family:'Manrope',sans-serif; font-weight:800;">Básico</th>
-            <th style="text-align:center; padding:8px 6px; font-family:'Manrope',sans-serif; font-weight:800; color:var(--azul-escuro);">Completo</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${TABELA_PLANOS.map(linha => `
-            <tr style="border-top:1px solid var(--cinza-linha);">
-              <td style="padding:8px 6px; color:var(--escuro);">${linha.nome}</td>
-              <td style="text-align:center; padding:8px 6px;">${celulaPlano(linha.gratis)}</td>
-              <td style="text-align:center; padding:8px 6px;">${celulaPlano(linha.basico)}</td>
-              <td style="text-align:center; padding:8px 6px;">${celulaPlano(linha.completo)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-
-    <label>Ciclo de cobrança</label>
-    <select id="assinaturaCiclo">
-      <option value="mensal">Mensal</option>
-      <option value="anual">Anual (2 meses grátis)</option>
-    </select>
-
-    <label>CPF ou CNPJ (exigido pelo Asaas pra gerar a cobrança)</label>
-    <input type="text" id="assinaturaCpfCnpj" placeholder="000.000.000-00 ou 00.000.000/0000-00" value="${esc((empresaAtual.precos.dadosEmpresa && empresaAtual.precos.dadosEmpresa.cnpj) || '')}">
-
-    <div class="price-grid" style="grid-template-columns: 1fr; margin-top:14px; gap:10px;">
-      <button class="btn btn-secundario" id="btnAssinarBasico" style="margin-top:0; text-align:left; padding:14px;">
-        <b>Básico</b> — <span id="precoBasico">R$ 29,90/mês</span>
-      </button>
-      <button class="btn btn-ambar" id="btnAssinarCompleto" style="margin-top:0; text-align:left; padding:14px;">
-        <b>Completo</b> — <span id="precoCompleto">R$ 79,90/mês</span>
-      </button>
-    </div>
-    <div class="msg" id="msgAssinatura"></div>
-  `;
-
-  document.getElementById('assinaturaCiclo').addEventListener('change', atualizarPrecosExibidos);
-  document.getElementById('btnAssinarBasico').addEventListener('click', () => assinarPlano('basico'));
-  document.getElementById('btnAssinarCompleto').addEventListener('click', () => assinarPlano('completo'));
-}
-
-function atualizarPrecosExibidos() {
-  const ciclo = document.getElementById('assinaturaCiclo').value;
-  document.getElementById('precoBasico').textContent = ciclo === 'anual' ? `R$ ${PLANO_PRECOS.basico.anual.toFixed(2).replace('.', ',')}/ano` : `R$ ${PLANO_PRECOS.basico.mensal.toFixed(2).replace('.', ',')}/mês`;
-  document.getElementById('precoCompleto').textContent = ciclo === 'anual' ? `R$ ${PLANO_PRECOS.completo.anual.toFixed(2).replace('.', ',')}/ano` : `R$ ${PLANO_PRECOS.completo.mensal.toFixed(2).replace('.', ',')}/mês`;
-}
-
-async function assinarPlano(plano) {
-  const msg = document.getElementById('msgAssinatura');
-  const ciclo = document.getElementById('assinaturaCiclo').value;
-  const cpfCnpj = document.getElementById('assinaturaCpfCnpj').value.replace(/[^\d]/g, '');
-  if (!cpfCnpj || (cpfCnpj.length !== 11 && cpfCnpj.length !== 14)) {
-    msg.className = 'msg erro'; msg.textContent = 'Digite um CPF (11 dígitos) ou CNPJ (14 dígitos) válido.';
-    return;
-  }
-  msg.className = 'msg'; msg.textContent = 'Gerando cobrança...';
-
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  try {
-    const resp = await fetch('https://lkankciqsldutuncuvyl.supabase.co/functions/v1/asaas-checkout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
-      body: JSON.stringify({ plano, ciclo, cpfCnpj })
-    });
-    const data = await resp.json();
-    if (!resp.ok || data.error) {
-      msg.className = 'msg erro';
-      msg.textContent = 'Erro: ' + (data.error || 'não foi possível gerar a cobrança.') + (data.detalhe ? ' — ' + JSON.stringify(data.detalhe) : '');
-      console.error('Erro assinatura:', data);
-      return;
-    }
-    if (data.jaAssinando) {
-      msg.className = 'msg ok';
-      msg.textContent = 'Você já está assinando este plano.';
-      return;
-    }
-    if (data.updated) {
-      msg.className = 'msg ok';
-      msg.textContent = 'Plano atualizado! A próxima cobrança já reflete o novo valor.';
-      empresaAtual.plano = plano;
-      empresaAtual.ciclo_cobranca = ciclo;
-      setTimeout(() => mostrarAba('config'), 1200);
-      return;
-    }
-    if (data.invoiceUrl) {
-      window.open(data.invoiceUrl, '_blank');
-      msg.className = 'msg ok';
-      msg.textContent = 'Link de pagamento aberto em nova aba. Depois de pagar, volte e recarregue o app.';
-    } else {
-      msg.className = 'msg erro'; msg.textContent = 'Cobrança criada, mas sem link de pagamento. Confira no painel do Asaas.';
-    }
-  } catch (e) {
-    msg.className = 'msg erro'; msg.textContent = 'Erro de conexão: ' + e.message;
-  }
-}
 
 async function salvarDadosEmpresa() {
   const novoNome = document.getElementById("inputNome").value.trim();
@@ -603,7 +460,10 @@ const AVISO_CLIENTES_GRATIS = 8;
 
 function planoEfetivo() {
   if (empresaAtual.cortesia) return 'completo';
-  return empresaAtual.plano || 'gratis';
+  const plano = empresaAtual.plano || 'gratis';
+  if (plano === 'gratis') return 'gratis';
+  // Sem assinatura ativa (pendente/atrasada/cancelada), o acesso cai pro Básico
+  return empresaAtual.assinatura_status === 'ativa' ? plano : 'basico';
 }
 
 function atualizarAvisoLimiteClientes() {
