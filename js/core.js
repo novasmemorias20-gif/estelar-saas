@@ -83,63 +83,180 @@ function mostrarAba(nome) {
     renderContrato();
   } else if (nome === "config") {
     const emp = empresaAtual.precos.dadosEmpresa || {};
-    conteudo.innerHTML = `<div class="card">
-      <h3>Dados da empresa</h3>
-      <p style="color: var(--cinza-texto); font-size: 13px; margin-top: -6px;">Esses dados aparecem nos orçamentos e contratos gerados para o cliente.</p>
-      <label for="inputNome">Nome da empresa</label>
-      <input type="text" id="inputNome" value="${esc(empresaAtual.nome_empresa)}">
-      <label>CNPJ</label><input type="text" id="cfgCnpj" placeholder="00.000.000/0000-00" value="${esc(emp.cnpj || '')}">
-      <label>Endereço / Cidade</label><input type="text" id="cfgEndereco" placeholder="Bairro, cidade - UF" value="${esc(emp.endereco || '')}">
-      <label>Telefone comercial</label><input type="text" id="cfgTelefone" placeholder="(18) 99169-0009" value="${esc(emp.telefone || '')}">
-      <label>E-mail comercial</label><input type="text" id="cfgEmail" placeholder="contato@empresa.com" value="${esc(emp.email || '')}">
-      <button class="btn" onclick="salvarDadosEmpresa()">Salvar</button>
-      <div class="msg" id="msgConfig"></div></div>
-      <div class="card" id="cardConta">
-        <h3>Conta e login</h3>
-        <p class="note" style="margin-top:-6px;">Vincule sua conta Google pra também poder entrar com ela, além do e-mail e senha.</p>
+    conteudo.innerHTML = `
+      ${ajustesSecaoHtml('empresa', 'Dados da empresa', ICONE_PREDIO, 'chip-azul', `
+        <p style="color: var(--cinza-texto); font-size: 13px; margin-top: -6px;">Esses dados aparecem nos orçamentos e contratos gerados para o cliente.</p>
+        <label for="inputNome">Nome da empresa</label>
+        <input type="text" id="inputNome" value="${esc(empresaAtual.nome_empresa)}">
+        <label>CNPJ</label><input type="text" id="cfgCnpj" placeholder="00.000.000/0000-00" value="${esc(emp.cnpj || '')}">
+        <label>Endereço / Cidade</label><input type="text" id="cfgEndereco" placeholder="Bairro, cidade - UF" value="${esc(emp.endereco || '')}">
+        <label>Telefone comercial</label><input type="text" id="cfgTelefone" placeholder="(18) 99169-0009" value="${esc(emp.telefone || '')}">
+        <label>E-mail comercial</label><input type="text" id="cfgEmail" placeholder="contato@empresa.com" value="${esc(emp.email || '')}">
+        <button class="btn" onclick="salvarDadosEmpresa()">Salvar</button>
+        <div class="msg" id="msgConfig"></div>
+      `, true)}
+
+      ${ajustesSecaoHtml('conta', 'Conta e segurança', ICONE_CADEADO, 'chip-verde', `
+        <p class="note" style="margin-top:-4px;">Vincule sua conta Google pra também poder entrar com ela, além do e-mail e senha.</p>
         <div id="statusVinculoGoogle" class="sub-item">Verificando...</div>
         <button class="btn btn-secundario" id="btnVincularGoogle">Vincular conta Google</button>
         <div class="msg" id="msgVinculoGoogle"></div>
-      </div>
-      <div class="card">
-        <h3>Ajuda</h3>
-        <a href="tutorial.html" target="_blank" class="btn btn-secundario" style="text-decoration:none; display:block;">📘 Como usar o Cosmos Pro</a>
-      </div>
-      <div class="card">
-        <h3>Plano e assinatura</h3>
+        <button class="btn btn-secundario" onclick="sair()" style="color:var(--erro); border-color:var(--erro); margin-top:16px;">Sair da conta</button>
+      `)}
+
+      ${ajustesSecaoHtml('assinatura', 'Assinatura e cobrança', ICONE_MOEDA, 'chip-ambar', `
         <div id="statusAssinatura"><p class="vazio">Carregando...</p></div>
-      </div>
-      <div class="card">
-        <h3>Cobrança de clientes (PIX)</h3>
+        <div style="border-top:1px solid var(--cinza-linha); margin:18px 0 14px;"></div>
+        <h4 style="margin:0 0 6px;">Cobrança de clientes (PIX)</h4>
         ${temAcessoCompleto() ? `
-        <p class="note" style="margin-top:-6px;">Cadastre sua própria chave de API do Asaas pra gerar cobranças PIX pros seus clientes direto pelas Ordens de Serviço. O dinheiro cai na sua conta Asaas, não passa pelo Cosmos Pro.</p>
+        <p class="note" style="margin-top:-4px;">Cadastre sua própria chave de API do Asaas pra gerar cobranças PIX pros seus clientes direto pelas Ordens de Serviço. O dinheiro cai na sua conta Asaas, não passa pelo Cosmos Pro.</p>
         <label>Chave de API do Asaas (Integrações → Chaves de API, no seu painel Asaas)</label>
         <input type="password" id="cfgAsaasKeyCliente" placeholder="$aact_..." value="${esc(empresaAtual.asaas_api_key_cliente || '')}">
         <button class="btn btn-secundario" id="btnSalvarAsaasKeyCliente" style="margin-top:10px;">Salvar chave</button>
         <div class="msg" id="msgAsaasKeyCliente"></div>
         ` : `
-        <p class="note" style="margin-top:-6px;">Gere cobranças PIX pros seus clientes direto pelas Ordens de Serviço. Recurso exclusivo do Plano Completo.</p>
+        <p class="note" style="margin-top:-4px;">Gere cobranças PIX pros seus clientes direto pelas Ordens de Serviço. Recurso exclusivo do Plano Completo.</p>
         <span class="badge-plano">Plano Completo</span>
         `}
-      </div>
-      <div class="card">
-        <h3>Aparência</h3>
+      `)}
+
+      ${ajustesSecaoHtml('backup', 'Dados e backup', ICONE_DOWNLOAD, 'chip-azul', `
+        <p class="note" style="margin-top:-4px;">Seus dados e os dos seus clientes são seus — baixe uma cópia sempre que quiser, pra guardar ou levar pra outro lugar.</p>
+        <button class="btn btn-secundario" id="btnBackupCompleto">Baixar backup completo (JSON)</button>
+        <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+          <button class="btn btn-secundario" id="btnExportarClientes" style="flex:1; min-width:150px;">Exportar clientes (CSV)</button>
+          <button class="btn btn-secundario" id="btnExportarOS" style="flex:1; min-width:150px;">Exportar OS (CSV)</button>
+        </div>
+        <div class="msg" id="msgBackup"></div>
+      `)}
+
+      ${ajustesSecaoHtml('preferencias', 'Preferências', ICONE_SLIDERS, 'chip-verde', `
         <div class="checkbox-row" style="margin-top:0;">
           <input type="checkbox" id="chkTemaEscuro">
           <label>Tema escuro</label>
         </div>
-      </div>
-      <div class="card">
-        <h3>Sessão</h3>
-        <button class="btn btn-secundario" onclick="sair()" style="color:var(--erro); border-color:var(--erro);">Sair da conta</button>
-      </div>`;
+      `)}
+
+      ${ajustesSecaoHtml('ajuda', 'Ajuda', ICONE_LIVRO, 'chip-ambar', `
+        <a href="tutorial.html" target="_blank" class="btn btn-secundario" style="text-decoration:none; display:block; text-align:center;">📘 Como usar o Cosmos Pro</a>
+      `)}
+    `;
     carregarStatusGoogle();
     renderStatusAssinatura();
     document.getElementById('btnVincularGoogle').addEventListener('click', vincularGoogle);
     document.getElementById('chkTemaEscuro').checked = localStorage.getItem(TEMA_ESCURO_KEY) === '1';
     document.getElementById('chkTemaEscuro').addEventListener('change', (e) => aplicarTema(e.target.checked));
     document.getElementById('btnSalvarAsaasKeyCliente')?.addEventListener('click', salvarAsaasKeyCliente);
+    document.getElementById('btnBackupCompleto').addEventListener('click', baixarBackupCompleto);
+    document.getElementById('btnExportarClientes').addEventListener('click', exportarClientesCsv);
+    document.getElementById('btnExportarOS').addEventListener('click', exportarOsCsv);
+    ligarTogglesAjustes(conteudo);
   }
+}
+
+function ajustesSecaoHtml(id, titulo, iconeSvg, corChip, conteudoHtml, aberta) {
+  return `
+    <div class="ajustes-secao ${aberta ? 'aberto' : ''}" data-ajustes-secao="${id}">
+      <div class="ajustes-secao-cabecalho" data-ajustes-toggle="${id}">
+        <div class="card-icon-chip ${corChip}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${iconeSvg}</svg></div>
+        <h3 style="margin:0; flex:1;">${titulo}</h3>
+        <svg class="ajustes-secao-seta" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="ajustes-secao-corpo ${aberta ? '' : 'hidden'}">${conteudoHtml}</div>
+    </div>`;
+}
+
+function ligarTogglesAjustes(container) {
+  container.querySelectorAll('[data-ajustes-toggle]').forEach(el => {
+    el.addEventListener('click', () => {
+      const secao = el.closest('[data-ajustes-secao]');
+      secao.classList.toggle('aberto');
+      secao.querySelector('.ajustes-secao-corpo').classList.toggle('hidden');
+    });
+  });
+}
+
+function baixarArquivo(nomeArquivo, conteudo, tipo) {
+  const blob = new Blob([conteudo], { type: tipo });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nomeArquivo;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+function paraCsv(linhas, colunas) {
+  const escapeCsv = (v) => {
+    const s = (v === null || v === undefined) ? '' : String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const cabecalho = colunas.map(c => escapeCsv(c.titulo)).join(',');
+  const corpo = linhas.map(l => colunas.map(c => escapeCsv(c.valor ? c.valor(l) : l[c.chave])).join(',')).join('\n');
+  return cabecalho + '\n' + corpo;
+}
+
+async function baixarBackupCompleto() {
+  const msg = document.getElementById('msgBackup');
+  msg.className = 'msg'; msg.textContent = 'Gerando backup...';
+  try {
+    const [clientes, os, orcamentos, contratos, agenda] = await Promise.all([
+      supabaseClient.from('clientes').select('*').eq('empresa_id', empresaAtual.id),
+      supabaseClient.from('ordens_servico').select('*').eq('empresa_id', empresaAtual.id),
+      supabaseClient.from('orcamentos').select('*').eq('empresa_id', empresaAtual.id),
+      supabaseClient.from('contratos').select('*').eq('empresa_id', empresaAtual.id),
+      supabaseClient.from('agenda').select('*').eq('empresa_id', empresaAtual.id)
+    ]);
+    const backup = {
+      geradoEm: new Date().toISOString(),
+      empresa: empresaAtual.nome_empresa,
+      clientes: clientes.data || [],
+      ordens_servico: os.data || [],
+      orcamentos: orcamentos.data || [],
+      contratos: contratos.data || [],
+      agenda: agenda.data || []
+    };
+    baixarArquivo(`backup-cosmos-pro-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(backup, null, 2), 'application/json');
+    msg.className = 'msg ok'; msg.textContent = 'Download iniciado!';
+  } catch (e) {
+    msg.className = 'msg erro'; msg.textContent = 'Erro ao gerar backup: ' + e.message;
+  }
+}
+
+async function exportarClientesCsv() {
+  const msg = document.getElementById('msgBackup');
+  msg.className = 'msg'; msg.textContent = 'Gerando...';
+  const { data, error } = await supabaseClient.from('clientes').select('*').eq('empresa_id', empresaAtual.id).order('nome');
+  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao buscar clientes.'; return; }
+  const csv = paraCsv(data || [], [
+    { titulo: 'Nome', chave: 'nome' },
+    { titulo: 'Telefone', chave: 'telefone' },
+    { titulo: 'E-mail', chave: 'email' },
+    { titulo: 'Endereço', chave: 'endereco' },
+    { titulo: 'CPF/CNPJ', chave: 'cpf_cnpj' },
+    { titulo: 'Intervalo de retorno (dias)', chave: 'intervalo_retorno_dias' },
+    { titulo: 'Cadastrado em', valor: c => c.created_at ? new Date(c.created_at).toLocaleDateString('pt-BR') : '' }
+  ]);
+  baixarArquivo(`clientes-${new Date().toISOString().slice(0, 10)}.csv`, '\uFEFF' + csv, 'text/csv;charset=utf-8;');
+  msg.className = 'msg ok'; msg.textContent = 'Download iniciado!';
+}
+
+async function exportarOsCsv() {
+  const msg = document.getElementById('msgBackup');
+  msg.className = 'msg'; msg.textContent = 'Gerando...';
+  const { data, error } = await supabaseClient.from('ordens_servico').select('*, clientes(nome)').eq('empresa_id', empresaAtual.id).order('created_at', { ascending: false });
+  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao buscar ordens de serviço.'; return; }
+  const csv = paraCsv(data || [], [
+    { titulo: 'Cliente', valor: o => o.clientes ? o.clientes.nome : '' },
+    { titulo: 'Descrição', chave: 'descricao' },
+    { titulo: 'Valor', chave: 'valor' },
+    { titulo: 'Status', chave: 'status' },
+    { titulo: 'Pago', valor: o => o.pago ? 'Sim' : 'Não' },
+    { titulo: 'Forma de pagamento', chave: 'forma_pagamento' },
+    { titulo: 'Data de pagamento', valor: o => o.data_pagamento ? new Date(o.data_pagamento).toLocaleDateString('pt-BR') : '' },
+    { titulo: 'Criada em', valor: o => o.created_at ? new Date(o.created_at).toLocaleDateString('pt-BR') : '' }
+  ]);
+  baixarArquivo(`ordens-de-servico-${new Date().toISOString().slice(0, 10)}.csv`, '\uFEFF' + csv, 'text/csv;charset=utf-8;');
+  msg.className = 'msg ok'; msg.textContent = 'Download iniciado!';
 }
 
 async function salvarAsaasKeyCliente() {
@@ -286,6 +403,11 @@ const ICONE_OS = '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2
 const ICONE_CLIENTE_MAIS = '<path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="17" y1="11" x2="23" y2="11"/>';
 const ICONE_MOEDA = '<circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5a2.5 2.5 0 0 1 2.5-1.5h.5a2 2 0 0 1 0 4h-1a2 2 0 0 0 0 4h.5a2.5 2.5 0 0 0 2.5-1.5"/>';
 const ICONE_CALENDARIO_CHECK = '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M9 16l2 2 4-4"/>';
+const ICONE_PREDIO = '<path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><line x1="9" y1="9" x2="9" y2="9.01"/><line x1="9" y1="12" x2="9" y2="12.01"/><line x1="9" y1="15" x2="9" y2="15.01"/>';
+const ICONE_CADEADO = '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>';
+const ICONE_DOWNLOAD = '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>';
+const ICONE_SLIDERS = '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>';
+const ICONE_LIVRO = '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>';
 
 async function renderInicio() {
   const conteudo = document.getElementById("conteudo");
