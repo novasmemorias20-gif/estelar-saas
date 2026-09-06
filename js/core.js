@@ -1561,6 +1561,7 @@ async function agRenderOS(card) {
       <div class="msg" id="osMsg"></div>
       ${osExistente ? `<button class="btn btn-secundario" id="osExcluirBtn" style="color:var(--erro); border-color:var(--erro); margin-top:10px;">Excluir esta OS</button>` : ''}
     </div>
+    ${osExistente ? relatorioFotosHtml() : ''}
     ${osExistente && !osExistente.pago ? osCobrancaPixHtml(osExistente, clienteInfo) : ''}
     ${osExistente ? (osContexto.agendaId ? `
     <div class="card" id="osAgendamentoCard">
@@ -1585,6 +1586,7 @@ async function agRenderOS(card) {
   document.getElementById('osSalvarBtn').addEventListener('click', () => osSalvar(osExistente ? osExistente.id : null));
   document.getElementById('osExcluirBtn')?.addEventListener('click', () => osExcluir(osExistente.id));
   document.getElementById('osConfirmarAgendaBtn')?.addEventListener('click', () => osConfirmarAgendamento(osExistente.id));
+  if (osExistente) ligarEventosRelatorio(osExistente, clienteInfo);
   if (osExistente && !osExistente.pago) ligarEventosCobrancaPix(osExistente, clienteInfo);
 
   if (osExistente && osContexto.agendaId) {
@@ -1603,6 +1605,167 @@ async function agRenderOS(card) {
       });
     }
   }
+}
+
+let osRelatorioFotos = { antes: [], depois: [] };
+
+function relatorioFotosHtml() {
+  if (!temAcessoCompleto()) {
+    return `<div class="card">
+      <h3 style="font-size:15px;">Relatório do serviço (PDF)</h3>
+      <p class="note" style="margin-top:-4px;">Gere um relatório em PDF com fotos de antes e depois pro cliente. Recurso exclusivo do Plano Completo.</p>
+    </div>`;
+  }
+  return `<div class="card" id="osRelatorioCard">
+    <h3 style="font-size:15px;">Relatório do serviço (PDF)</h3>
+    <p class="note" style="margin-top:-4px;">Monte um relatório em PDF com fotos de antes e depois pra mandar pro cliente. As fotos não ficam salvas no Cosmos Pro — só entram no PDF que você gerar.</p>
+    <label>Fotos de antes</label>
+    <input type="file" id="osFotosAntes" accept="image/*" multiple>
+    <div id="osPreviewAntes" class="relatorio-preview"></div>
+    <label style="margin-top:10px;">Fotos de depois</label>
+    <input type="file" id="osFotosDepois" accept="image/*" multiple>
+    <div id="osPreviewDepois" class="relatorio-preview"></div>
+    <button class="btn btn-ambar" id="osGerarRelatorioBtn" style="margin-top:12px;">Gerar relatório PDF</button>
+    <div class="msg" id="osRelatorioMsg"></div>
+  </div>`;
+}
+
+function ligarEventosRelatorio(ctx, cliente) {
+  if (!temAcessoCompleto()) return;
+  osRelatorioFotos = { antes: [], depois: [] };
+  document.getElementById('osFotosAntes')?.addEventListener('change', (e) => relatorioAdicionarFotos(e, 'antes'));
+  document.getElementById('osFotosDepois')?.addEventListener('change', (e) => relatorioAdicionarFotos(e, 'depois'));
+  document.getElementById('osGerarRelatorioBtn')?.addEventListener('click', () => relatorioGerarPdf(ctx, cliente));
+}
+
+function relatorioRedimensionarImagem(arquivo) {
+  return new Promise((resolve) => {
+    const leitor = new FileReader();
+    leitor.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxLado = 1000;
+        let { width, height } = img;
+        if (width > maxLado || height > maxLado) {
+          const escala = maxLado / Math.max(width, height);
+          width = Math.round(width * escala);
+          height = Math.round(height * escala);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      };
+      img.src = e.target.result;
+    };
+    leitor.readAsDataURL(arquivo);
+  });
+}
+
+async function relatorioAdicionarFotos(evento, tipo) {
+  const arquivos = Array.from(evento.target.files || []);
+  for (const arquivo of arquivos) {
+    const dataUrl = await relatorioRedimensionarImagem(arquivo);
+    osRelatorioFotos[tipo].push(dataUrl);
+  }
+  evento.target.value = '';
+  relatorioRenderPreview(tipo);
+}
+
+function relatorioRenderPreview(tipo) {
+  const container = document.getElementById(tipo === 'antes' ? 'osPreviewAntes' : 'osPreviewDepois');
+  if (!container) return;
+  container.innerHTML = osRelatorioFotos[tipo].map((src, i) => `
+    <div class="relatorio-thumb">
+      <img src="${src}">
+      <button type="button" data-remover="${tipo}:${i}">×</button>
+    </div>
+  `).join('');
+  container.querySelectorAll('[data-remover]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const [tipoRem, idx] = btn.getAttribute('data-remover').split(':');
+      osRelatorioFotos[tipoRem].splice(Number(idx), 1);
+      relatorioRenderPreview(tipoRem);
+    });
+  });
+}
+
+async function relatorioGerarPdf(ctx, cliente) {
+  const msg = document.getElementById('osRelatorioMsg');
+  if (!window.jspdf) { msg.className = 'msg erro'; msg.textContent = 'Não foi possível carregar o gerador de PDF. Verifique sua conexão e tente de novo.'; return; }
+  msg.className = 'msg'; msg.textContent = 'Gerando PDF...';
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const larguraPagina = doc.internal.pageSize.getWidth();
+  const alturaPagina = doc.internal.pageSize.getHeight();
+  const margem = 15;
+
+  doc.setFillColor(37, 99, 235);
+  doc.rect(0, 0, larguraPagina, 28, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text(empresaAtual.nome_empresa || 'Cosmos Pro', margem, 14);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Relatório de Serviço', margem, 21);
+
+  let y = 40;
+  doc.setTextColor(15, 23, 42);
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`Cliente: ${(cliente && cliente.nome) || '-'}`, margem, y);
+  y += 6;
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Serviço: ${(ctx && ctx.descricao) || document.getElementById('osDescricao')?.value || '-'}`, margem, y);
+  y += 6;
+  doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, margem, y);
+  y += 10;
+
+  const pares = Math.max(osRelatorioFotos.antes.length, osRelatorioFotos.depois.length);
+  const larguraFoto = (larguraPagina - margem * 2 - 6) / 2;
+  const alturaFoto = 60;
+
+  for (let i = 0; i < pares; i++) {
+    if (y + alturaFoto + 14 > alturaPagina - 20) { doc.addPage(); y = margem; }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(15, 23, 42);
+    if (osRelatorioFotos.antes[i]) {
+      doc.text('ANTES', margem, y);
+      doc.addImage(osRelatorioFotos.antes[i], 'JPEG', margem, y + 2, larguraFoto, alturaFoto);
+    }
+    if (osRelatorioFotos.depois[i]) {
+      doc.text('DEPOIS', margem + larguraFoto + 6, y);
+      doc.addImage(osRelatorioFotos.depois[i], 'JPEG', margem + larguraFoto + 6, y + 2, larguraFoto, alturaFoto);
+    }
+    y += alturaFoto + 14;
+  }
+
+  if (y + 30 > alturaPagina - 20) { doc.addPage(); y = margem; }
+  y += 6;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text('Obrigado pela confiança!', margem, y);
+  y += 7;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  const agradecimento = 'Foi um prazer cuidar do seu serviço. Em seguida enviaremos o link de pagamento e/ou a chave Pix para a finalização.';
+  const linhas = doc.splitTextToSize(agradecimento, larguraPagina - margem * 2);
+  doc.text(linhas, margem, y);
+
+  const totalPaginas = doc.internal.getNumberOfPages();
+  for (let p = 1; p <= totalPaginas; p++) {
+    doc.setPage(p);
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text('feito no Cosmos Pro', larguraPagina - margem, alturaPagina - 8, { align: 'right' });
+  }
+
+  const nomeArquivo = `relatorio-${((cliente && cliente.nome) || 'servico').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${new Date().toISOString().slice(0, 10)}.pdf`;
+  doc.save(nomeArquivo);
+  msg.className = 'msg ok'; msg.textContent = 'PDF gerado!';
 }
 
 function osCobrancaPixHtml(osExistente, clienteInfo) {
