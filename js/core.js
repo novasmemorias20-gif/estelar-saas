@@ -109,7 +109,7 @@ function mostrarAba(nome) {
         <div style="border-top:1px solid var(--cinza-linha); margin:18px 0 14px;"></div>
         <h4 style="margin:0 0 6px;">Cobrança de clientes (PIX)</h4>
         ${temAcessoCompleto() ? `
-        <p class="note" style="margin-top:-4px;">Cadastre sua própria chave de API do Asaas pra gerar cobranças PIX pros seus clientes direto pelas Ordens de Serviço. O dinheiro cai na sua conta Asaas, não passa pelo Cosmos Pro.</p>
+        <p class="note" style="margin-top:-4px;">Cadastre sua própria chave de API do Asaas pra gerar cobranças PIX pros seus clientes direto pelas Ordens de Serviço. O dinheiro cai na sua conta Asaas, não passa pelo Cosmos Clima.</p>
         <label>Chave de API do Asaas (Integrações → Chaves de API, no seu painel Asaas)</label>
         <input type="password" id="cfgAsaasKeyCliente" placeholder="$aact_..." value="${esc(empresaAtual.asaas_api_key_cliente || '')}">
         <button class="btn btn-secundario" id="btnSalvarAsaasKeyCliente" style="margin-top:10px;">Salvar chave</button>
@@ -138,7 +138,7 @@ function mostrarAba(nome) {
       `)}
 
       ${ajustesSecaoHtml('ajuda', 'Ajuda', ICONE_LIVRO, 'chip-ambar', `
-        <a href="tutorial.html" target="_blank" class="btn btn-secundario" style="text-decoration:none; display:block; text-align:center;">📘 Como usar o Cosmos Pro</a>
+        <a href="tutorial.html" target="_blank" class="btn btn-secundario" style="text-decoration:none; display:block; text-align:center;">📘 Como usar o Cosmos Clima</a>
       `)}
     `;
     carregarStatusGoogle();
@@ -1627,7 +1627,7 @@ function relatorioFotosHtml() {
   }
   return `<div class="card" id="osRelatorioCard">
     <h3 style="font-size:15px;">Relatório do serviço (PDF)</h3>
-    <p class="note" style="margin-top:-4px;">Monte um relatório em PDF com fotos de antes e depois pra mandar pro cliente. As fotos não ficam salvas no Cosmos Pro — só entram no PDF que você gerar.</p>
+    <p class="note" style="margin-top:-4px;">Monte um relatório em PDF com fotos de antes e depois pra mandar pro cliente. As fotos não ficam salvas no Cosmos Clima — só entram no PDF que você gerar.</p>
 
     <label>Fotos de antes</label>
     <input type="file" id="osFotosAntes" accept="image/*" multiple>
@@ -1783,7 +1783,7 @@ async function relatorioGerarPdf(ctx, cliente) {
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(18);
-  doc.text(empresaAtual.nome_empresa || 'Cosmos Pro', margem, 15);
+  doc.text(empresaAtual.nome_empresa || 'Cosmos Clima', margem, 15);
   doc.setFontSize(10.5);
   doc.setFont('helvetica', 'normal');
   doc.text('Relatório de Serviço', margem, 22);
@@ -1910,7 +1910,11 @@ async function relatorioGerarPdf(ctx, cliente) {
     doc.line(margem, altura - 14, largura - margem, altura - 14);
     doc.setFontSize(8);
     doc.setTextColor(148, 163, 184);
-    doc.text('feito no Cosmos Pro', margem, altura - 9);
+    doc.text('feito no Cosmos Clima', margem, altura - 9);
+    const larguraTextoRodape = doc.getTextWidth('feito no Cosmos Clima ');
+    doc.setFontSize(6.5);
+    doc.text('by Estelar', margem + larguraTextoRodape, altura - 9);
+    doc.setFontSize(8);
     doc.text(`Página ${p} de ${totalPaginas}`, largura - margem, altura - 9, { align: 'right' });
   }
 
@@ -2184,7 +2188,7 @@ function renderAvulso() {
         <div class="proposal-total-desconto hidden" id="avProposalTotalDesconto"><span class="lbl">À vista (com desconto)</span><span class="val" id="avProposalTotalComDesconto">R$ 0,00</span></div>
         <div class="proposal-condicoes" id="avProposalCondicoes"></div>
         <div class="proposal-footer" id="avProposalFooter"></div>
-        <div class="proposal-marca">feito no Cosmos Pro</div>
+        <div class="proposal-marca">feito no Cosmos Clima <span class="marca-by">by Estelar</span></div>
       </div>
       <div class="action-row">
         <button class="btn btn-secundario" id="avNovaAbaBtn">Salvar / imprimir PDF</button>
@@ -2413,7 +2417,7 @@ function avBuildStandaloneHTML(d) {
   .proposal-condicoes{margin:16px 20px 0;padding:14px 16px;border-radius:10px;background:#f8fafc;border:1px solid #e2e8f0;font-size:11.5px;color:#475569;line-height:1.6;}
   .proposal-condicoes b{display:block;color:#0f172a;font-size:12.5px;margin-bottom:4px;}
   .proposal-footer{padding:16px 20px 4px;font-size:11px;color:#64748b;line-height:1.5;}
-  .proposal-marca{padding:10px 20px 18px;font-size:10px;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;margin-top:4px;}
+  .proposal-marca{padding:10px 20px 18px;font-size:10px;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;margin-top:4px;} .proposal-marca .marca-by{font-size:.9em;opacity:.85;}
   .print-btn{width:100%;padding:13px;margin-top:16px;border-radius:10px;border:none;background:#2563eb;color:#fff;font-size:14px;font-weight:700;cursor:pointer;}
   @media print{.no-print{display:none !important;}body{background:#fff;padding:0;}}
   </style></head><body><div class="wrap"><div class="proposal">
@@ -2423,7 +2427,7 @@ function avBuildStandaloneHTML(d) {
   ${d.temDesconto ? `<div class="proposal-total-desconto"><span class="lbl">À vista</span><span class="val">${d.totalComDescontoFormatado}</span></div>` : ''}
   <div class="proposal-condicoes">${d.condicoesHtml}</div>
   <div class="proposal-footer">${d.footerText}<br>${d.empresaHtml}</div>
-  <div class="proposal-marca">feito no Cosmos Pro</div>
+  <div class="proposal-marca">feito no Cosmos Clima <span class="marca-by">by Estelar</span></div>
   </div><button class="print-btn no-print" onclick="window.print()">Salvar / imprimir PDF</button></div></body></html>`;
 }
 
@@ -2716,7 +2720,7 @@ function renderContrato() {
         <div class="proposal-items" id="ctPropostaItems"></div>
         <div class="proposal-total"><span class="lbl">Valor por visita</span><span class="val" id="ctPropostaTotal">R$ 0,00</span></div>
         <div class="proposal-condicoes" id="ctPropostaCondicoes"></div>
-        <div class="proposal-marca">feito no Cosmos Pro</div>
+        <div class="proposal-marca">feito no Cosmos Clima <span class="marca-by">by Estelar</span></div>
       </div>
       <div class="action-row">
         <button class="btn btn-secundario" id="ctPrintBtn">Salvar / imprimir PDF</button>
@@ -3041,7 +3045,7 @@ function ctMontarContrato() {
     </table>
     <p style="margin-top:12px; font-size:12.5px;"><b>Frequência:</b> ${visitas}x/ano · <b>Deslocamento:</b> ${km} km · <b>Valor/visita:</b> ${money(totalVisita)} · <b>Valor anual estimado:</b> ${money(totalAnual)}</p>
     <p style="font-size:11px; color:var(--cinza-texto); margin-top:16px;">Minuta gerada automaticamente a partir do orçamento. Revise dados cadastrais (CNPJ, RT, foro) antes de formalizar.</p>
-    <div class="proposal-marca">feito no Cosmos Pro</div>
+    <div class="proposal-marca">feito no Cosmos Clima <span class="marca-by">by Estelar</span></div>
   `;
 
   document.getElementById('ctEditor').classList.add('hidden');
