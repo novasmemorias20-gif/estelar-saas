@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Como usar — Cosmos Pro</title>
+<title>Como usar — Cosmos Clima by Estelar</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -17,6 +17,7 @@
 body { margin:0; font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--cinza-claro); color:var(--escuro); }
 .topo { background:var(--gradiente); padding:32px 20px 40px; text-align:center; color:#fff; }
 .topo h1 { font-family:"Manrope",sans-serif; font-weight:800; font-size:22px; margin:0 0 4px; }
+.marca-by { font-size: 0.55em; font-weight: 500; opacity: .65; margin-left: 4px; }
 .topo p { margin:0; font-size:13px; color:#e0f2fe; }
 .container { max-width:640px; margin:-20px auto 40px; padding:0 16px; }
 .secao { background:#fff; border:1px solid var(--cinza-linha); border-radius:16px; padding:20px; margin-bottom:14px; box-shadow:0 1px 2px rgba(15,23,42,.05), 0 6px 16px rgba(15,23,42,.06); }
@@ -33,7 +34,7 @@ body { margin:0; font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI"
 </head>
 <body>
 <div class="topo">
-  <h1>Como usar o Cosmos Pro</h1>
+  <h1>Como usar o Cosmos Clima<span class="marca-by">by Estelar</span></h1>
   <p>Um guia rápido do fluxo do dia a dia</p>
 </div>
 <div class="container">
@@ -46,12 +47,15 @@ body { margin:0; font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI"
     <a href="#agenda">3. Agendar e acompanhar</a>
     <a href="#clientes">Clientes</a>
     <a href="#contrato">Contratos de manutenção</a>
-    <a href="#config">Configurações</a>
+    <a href="#asaas">Configurar o Asaas (Plano Completo)</a>
+    <a href="#pix-cliente">Cobrança PIX pro cliente</a>
+    <a href="#relatorio">Relatório de serviço (PDF)</a>
+    <a href="#config">Configurações e backup</a>
   </div>
 
   <div class="secao" id="fluxo">
     <h2>O fluxo principal</h2>
-    <p>O Cosmos Pro segue sempre a mesma lógica, do orçamento até o pagamento:</p>
+    <p>O Cosmos Clima segue sempre a mesma lógica, do orçamento até o pagamento:</p>
     <p style="font-weight:700; color:var(--escuro);">Cliente → Orçamento (ou Contrato) → Ordem de Serviço → Agendamento → Execução → Pagamento</p>
     <p>Tudo começa com um orçamento (ou contrato) salvo pro cliente. É a partir dele que a Ordem de Serviço nasce, já com os itens e o valor preenchidos.</p>
   </div>
@@ -98,9 +102,59 @@ body { margin:0; font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI"
     <p>O sistema calcula sozinho a carga térmica total e decide se o contrato precisa de Responsável Técnico e ART (obrigatório a partir de 5 TR) — e já gera o contrato jurídico completo, pronto pra assinar.</p>
   </div>
 
+  <div class="secao" id="asaas">
+    <h2>💳 Configurar o Asaas <span style="font-weight:600; font-size:12px; color:var(--ambar);">(Plano Completo)</span></h2>
+    <p>A cobrança PIX pro cliente final funciona através de uma conta no <b>Asaas</b>, um banco digital brasileiro que emite as cobranças pra você. O dinheiro cai direto na sua conta Asaas — o Cosmos Clima nunca chega a tocar nesse valor.</p>
+    <p>Você só precisa fazer essa configuração <b>uma vez</b>. Depois disso, é só gerar cobranças direto pelas Ordens de Serviço.</p>
+    <ol>
+      <li>Acesse <b>asaas.com</b> e clique em <b>"Criar conta grátis"</b></li>
+      <li>Preencha os dados da sua empresa (CNPJ ou CPF, dados de contato) e complete a verificação de cadastro pedida pelo Asaas — isso costuma levar de alguns minutos a 1 dia útil</li>
+      <li>Depois de aprovado, entre no painel e vá em <b>Integrações → Chaves de API</b></li>
+      <li>Copie a chave de API (começa com algo como <code>$aact_...</code>)</li>
+      <li>No Cosmos Clima, vá em <b>Ajustes → Assinatura e cobrança → Cobrança de clientes (PIX)</b>, cole a chave e clique em <b>Salvar</b></li>
+    </ol>
+    <div class="dica">⚠️ Essa chave dá acesso à sua conta bancária do Asaas — nunca compartilhe ela com ninguém. O Cosmos Clima guarda ela de forma restrita, visível só pra sua própria empresa.</div>
+  </div>
+
+  <div class="secao" id="pix-cliente">
+    <h2>📲 Cobrança PIX pro cliente <span style="font-weight:600; font-size:12px; color:var(--ambar);">(Plano Completo)</span></h2>
+    <p>Depois de configurar o Asaas, abra qualquer Ordem de Serviço ainda não paga. Vai aparecer um card <b>"Cobrança PIX"</b>:</p>
+    <ol>
+      <li>Informe o CPF ou CNPJ do cliente (só precisa na primeira vez — depois fica salvo no cadastro dele)</li>
+      <li>Clique em <b>"Gerar cobrança PIX"</b></li>
+      <li>Use os botões <b>"Abrir cobrança"</b> (link pra mandar pro cliente) ou <b>"Copiar código PIX"</b> (o famoso copia-e-cola) pra enviar por WhatsApp</li>
+    </ol>
+    <div class="dica">💡 Precisou gerar de novo por algum motivo (valor errado, cliente perdeu o link)? É só clicar em "Gerar nova cobrança".</div>
+  </div>
+
+  <div class="secao" id="relatorio">
+    <h2>📄 Relatório de serviço em PDF <span style="font-weight:600; font-size:12px; color:var(--ambar);">(Plano Completo)</span></h2>
+    <p>Ainda na tela da Ordem de Serviço, tem o card <b>"Relatório do serviço (PDF)"</b> — um jeito bonito de mostrar o trabalho feito pro cliente antes de mandar a cobrança.</p>
+    <ol>
+      <li>Adicione fotos de <b>antes</b> e de <b>depois</b> (pode tirar na hora pela câmera do celular ou escolher da galeria)</li>
+      <li>Marque os <b>benefícios do serviço</b> que se aplicam (alguns já vêm marcados) — dá pra desmarcar os que não fazem sentido e escrever um extra no campo de texto</li>
+      <li>Escreva uma <b>observação</b>, se quiser (opcional — só aparece no PDF se você preencher)</li>
+      <li>Clique em <b>"Gerar relatório PDF"</b> — o arquivo é baixado na hora, pronto pra mandar pro cliente</li>
+    </ol>
+    <div class="dica">🔒 As fotos nunca ficam salvas no Cosmos Clima — elas só existem no seu celular enquanto você monta o relatório, e vão direto pro PDF gerado.</div>
+  </div>
+
   <div class="secao" id="config">
-    <h2>Configurações</h2>
-    <p>Em <b>Ajustes</b> você define o nome, CNPJ, endereço e contato da sua empresa (aparecem nos orçamentos e contratos gerados), além de poder vincular login com Google e sair da conta.</p>
+    <h2>Configurações e backup</h2>
+    <p>A aba <b>Ajustes</b> é dividida por categorias, cada uma expansível — toque no título pra abrir ou fechar:</p>
+    <ul>
+      <li><b>Dados da empresa</b> — nome, CNPJ, endereço e contato, que aparecem nos orçamentos e contratos gerados</li>
+      <li><b>Conta e segurança</b> — vincular login com Google e sair da conta</li>
+      <li><b>Assinatura e cobrança</b> — seu plano no Cosmos Clima e a chave do Asaas pra cobrar seus clientes</li>
+      <li><b>Dados e backup</b> — baixe uma cópia completa dos seus dados quando quiser</li>
+      <li><b>Preferências</b> — tema escuro</li>
+    </ul>
+    <p>Na seção <b>Dados e backup</b>, você pode baixar a qualquer momento:</p>
+    <ul>
+      <li><b>Backup completo (JSON)</b> — todos os seus dados (clientes, ordens de serviço, orçamentos, contratos, agenda) num arquivo só, pra guardar como cópia de segurança</li>
+      <li><b>Clientes (CSV)</b> e <b>Ordens de serviço (CSV)</b> — pra abrir direto no Excel ou Google Sheets</li>
+    </ul>
+    <div class="dica">💡 Seus dados e os dos seus clientes são seus — vale o hábito de baixar um backup de vez em quando, especialmente antes de trocar de celular.</div>
   </div>
 
 </div>
