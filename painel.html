@@ -263,6 +263,14 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
 .os-status-azul .os-status-cabecalho { background: var(--azul-tinta); }
 .os-status-ambar .os-status-cabecalho { background: var(--ambar-tinta); }
 .os-status-verde .os-status-cabecalho { background: var(--sucesso-bg); }
+
+/* Ajustes — seções expansíveis por categoria */
+.ajustes-secao { background: var(--superficie); border-radius: 16px; border: 1px solid var(--cinza-linha); box-shadow: var(--sombra); margin-bottom: 12px; overflow: hidden; }
+.ajustes-secao-cabecalho { display: flex; align-items: center; gap: 12px; padding: 15px 16px; cursor: pointer; }
+.ajustes-secao-seta { color: var(--cinza-texto); transition: transform .15s; flex-shrink: 0; }
+.ajustes-secao.aberto .ajustes-secao-seta { transform: rotate(180deg); }
+.ajustes-secao-corpo { padding: 0 16px 16px; }
+.ajustes-secao h4 { font-size: 13px; color: var(--cinza-texto); text-transform: uppercase; letter-spacing: .02em; font-weight: 700; }
 </style>
 </head>
 <body>
