@@ -1609,6 +1609,15 @@ async function agRenderOS(card) {
 
 let osRelatorioFotos = { antes: [], depois: [] };
 
+const RELATORIO_BENEFICIOS_PADRAO = [
+  'Maior eficiência energética',
+  'Ar mais limpo e saudável',
+  'Redução de ruído no funcionamento',
+  'Elimina fungos, bactérias e ácaros',
+  'Prolonga a vida útil do equipamento',
+  'Reduz o consumo de energia elétrica'
+];
+
 function relatorioFotosHtml() {
   if (!temAcessoCompleto()) {
     return `<div class="card">
@@ -1619,13 +1628,29 @@ function relatorioFotosHtml() {
   return `<div class="card" id="osRelatorioCard">
     <h3 style="font-size:15px;">Relatório do serviço (PDF)</h3>
     <p class="note" style="margin-top:-4px;">Monte um relatório em PDF com fotos de antes e depois pra mandar pro cliente. As fotos não ficam salvas no Cosmos Pro — só entram no PDF que você gerar.</p>
+
     <label>Fotos de antes</label>
     <input type="file" id="osFotosAntes" accept="image/*" multiple>
     <div id="osPreviewAntes" class="relatorio-preview"></div>
     <label style="margin-top:10px;">Fotos de depois</label>
     <input type="file" id="osFotosDepois" accept="image/*" multiple>
     <div id="osPreviewDepois" class="relatorio-preview"></div>
-    <button class="btn btn-ambar" id="osGerarRelatorioBtn" style="margin-top:12px;">Gerar relatório PDF</button>
+
+    <label style="margin-top:14px;">Benefícios do serviço prestado</label>
+    <div class="relatorio-beneficios">
+      ${RELATORIO_BENEFICIOS_PADRAO.map((b, i) => `
+        <div class="checkbox-row" style="margin-top:6px;">
+          <input type="checkbox" id="osBeneficio${i}" checked>
+          <label for="osBeneficio${i}" style="font-size:13px;">${esc(b)}</label>
+        </div>
+      `).join('')}
+    </div>
+    <input type="text" id="osBeneficioExtra" placeholder="Outro benefício (opcional)" style="margin-top:8px;">
+
+    <label style="margin-top:14px;">Observação do técnico (opcional)</label>
+    <textarea id="osObservacaoTecnico" rows="3" placeholder="Ex.: recomendo nova manutenção em 6 meses..."></textarea>
+
+    <button class="btn btn-ambar" id="osGerarRelatorioBtn" style="margin-top:14px;">Gerar relatório PDF</button>
     <div class="msg" id="osRelatorioMsg"></div>
   </div>`;
 }
@@ -1646,6 +1671,7 @@ function relatorioRedimensionarImagem(arquivo) {
       img.onload = () => {
         const maxLado = 1000;
         let { width, height } = img;
+        const larguraOriginal = width, alturaOriginal = height;
         if (width > maxLado || height > maxLado) {
           const escala = maxLado / Math.max(width, height);
           width = Math.round(width * escala);
@@ -1654,7 +1680,7 @@ function relatorioRedimensionarImagem(arquivo) {
         const canvas = document.createElement('canvas');
         canvas.width = width; canvas.height = height;
         canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.82));
+        resolve({ dataUrl: canvas.toDataURL('image/jpeg', 0.85), proporcao: larguraOriginal / alturaOriginal });
       };
       img.src = e.target.result;
     };
@@ -1665,8 +1691,8 @@ function relatorioRedimensionarImagem(arquivo) {
 async function relatorioAdicionarFotos(evento, tipo) {
   const arquivos = Array.from(evento.target.files || []);
   for (const arquivo of arquivos) {
-    const dataUrl = await relatorioRedimensionarImagem(arquivo);
-    osRelatorioFotos[tipo].push(dataUrl);
+    const foto = await relatorioRedimensionarImagem(arquivo);
+    osRelatorioFotos[tipo].push(foto);
   }
   evento.target.value = '';
   relatorioRenderPreview(tipo);
@@ -1675,9 +1701,9 @@ async function relatorioAdicionarFotos(evento, tipo) {
 function relatorioRenderPreview(tipo) {
   const container = document.getElementById(tipo === 'antes' ? 'osPreviewAntes' : 'osPreviewDepois');
   if (!container) return;
-  container.innerHTML = osRelatorioFotos[tipo].map((src, i) => `
+  container.innerHTML = osRelatorioFotos[tipo].map((foto, i) => `
     <div class="relatorio-thumb">
-      <img src="${src}">
+      <img src="${foto.dataUrl}">
       <button type="button" data-remover="${tipo}:${i}">×</button>
     </div>
   `).join('');
@@ -1690,77 +1716,202 @@ function relatorioRenderPreview(tipo) {
   });
 }
 
+// --- Helpers de desenho do PDF ---
+function relatorioDesenharFaixaGradiente(doc, x, y, largura, altura, corA, corB) {
+  const passos = 40;
+  for (let i = 0; i < passos; i++) {
+    const t = i / (passos - 1);
+    const r = Math.round(corA[0] + (corB[0] - corA[0]) * t);
+    const g = Math.round(corA[1] + (corB[1] - corA[1]) * t);
+    const b = Math.round(corA[2] + (corB[2] - corA[2]) * t);
+    doc.setFillColor(r, g, b);
+    doc.rect(x + (largura / passos) * i, y, largura / passos + 0.5, altura, 'F');
+  }
+}
+
+function relatorioDesenharPill(doc, texto, x, y, corFundo, corTexto) {
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  const largura = doc.getTextWidth(texto) + 6;
+  doc.setFillColor(...corFundo);
+  doc.roundedRect(x, y, largura, 5.5, 2.5, 2.5, 'F');
+  doc.setTextColor(...corTexto);
+  doc.text(texto, x + 3, y + 3.9);
+  return largura;
+}
+
+function relatorioTituloSecao(doc, texto, x, y, largura) {
+  doc.setFillColor(37, 99, 235);
+  doc.rect(x, y - 3.5, 3, 5, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setTextColor(15, 23, 42);
+  doc.text(texto, x + 6, y);
+  doc.setDrawColor(226, 232, 240);
+  doc.line(x, y + 3, x + largura, y + 3);
+}
+
 async function relatorioGerarPdf(ctx, cliente) {
   const msg = document.getElementById('osRelatorioMsg');
   if (!window.jspdf) { msg.className = 'msg erro'; msg.textContent = 'Não foi possível carregar o gerador de PDF. Verifique sua conexão e tente de novo.'; return; }
   msg.className = 'msg'; msg.textContent = 'Gerando PDF...';
 
+  const beneficios = RELATORIO_BENEFICIOS_PADRAO.filter((_, i) => document.getElementById(`osBeneficio${i}`)?.checked);
+  const beneficioExtra = document.getElementById('osBeneficioExtra')?.value.trim();
+  if (beneficioExtra) beneficios.push(beneficioExtra);
+  const observacao = document.getElementById('osObservacaoTecnico')?.value.trim();
+  const emp = empresaAtual.precos.dadosEmpresa || {};
+
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-  const larguraPagina = doc.internal.pageSize.getWidth();
-  const alturaPagina = doc.internal.pageSize.getHeight();
+  const largura = doc.internal.pageSize.getWidth();
+  const altura = doc.internal.pageSize.getHeight();
   const margem = 15;
+  const larguraUtil = largura - margem * 2;
 
-  doc.setFillColor(37, 99, 235);
-  doc.rect(0, 0, larguraPagina, 28, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.text(empresaAtual.nome_empresa || 'Cosmos Pro', margem, 14);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Relatório de Serviço', margem, 21);
-
-  let y = 40;
-  doc.setTextColor(15, 23, 42);
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
-  doc.text(`Cliente: ${(cliente && cliente.nome) || '-'}`, margem, y);
-  y += 6;
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Serviço: ${(ctx && ctx.descricao) || document.getElementById('osDescricao')?.value || '-'}`, margem, y);
-  y += 6;
-  doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, margem, y);
-  y += 10;
-
-  const pares = Math.max(osRelatorioFotos.antes.length, osRelatorioFotos.depois.length);
-  const larguraFoto = (larguraPagina - margem * 2 - 6) / 2;
-  const alturaFoto = 60;
-
-  for (let i = 0; i < pares; i++) {
-    if (y + alturaFoto + 14 > alturaPagina - 20) { doc.addPage(); y = margem; }
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.setTextColor(15, 23, 42);
-    if (osRelatorioFotos.antes[i]) {
-      doc.text('ANTES', margem, y);
-      doc.addImage(osRelatorioFotos.antes[i], 'JPEG', margem, y + 2, larguraFoto, alturaFoto);
-    }
-    if (osRelatorioFotos.depois[i]) {
-      doc.text('DEPOIS', margem + larguraFoto + 6, y);
-      doc.addImage(osRelatorioFotos.depois[i], 'JPEG', margem + larguraFoto + 6, y + 2, larguraFoto, alturaFoto);
-    }
-    y += alturaFoto + 14;
+  function novaPagina() {
+    doc.addPage();
+    return margem + 5;
+  }
+  function garantirEspaco(yAtual, precisa) {
+    if (yAtual + precisa > altura - 18) return novaPagina();
+    return yAtual;
   }
 
-  if (y + 30 > alturaPagina - 20) { doc.addPage(); y = margem; }
-  y += 6;
+  // Cabeçalho com faixa em degradê
+  relatorioDesenharFaixaGradiente(doc, 0, 0, largura, 32, [37, 99, 235], [6, 182, 212]);
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.text(empresaAtual.nome_empresa || 'Cosmos Pro', margem, 15);
+  doc.setFontSize(10.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Relatório de Serviço', margem, 22);
+  const contatoLinha = [emp.telefone, emp.email].filter(Boolean).join('  ·  ');
+  if (contatoLinha) { doc.setFontSize(8.5); doc.text(contatoLinha, margem, 27.5); }
+
+  let y = 45;
+
+  // Card resumo do serviço
+  const alturaResumo = 32;
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(margem, y, larguraUtil, alturaResumo, 3, 3, 'FD');
+  const colX = margem + 6;
+  const col2X = margem + larguraUtil / 2 + 4;
+  let ry = y + 8;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(100, 116, 139);
+  doc.text('CLIENTE', colX, ry);
+  doc.text('DATA', col2X, ry);
+  ry += 5;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(15, 23, 42);
+  doc.text((cliente && cliente.nome) || '-', colX, ry);
+  doc.text(new Date().toLocaleDateString('pt-BR'), col2X, ry);
+  ry += 8;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(100, 116, 139);
+  doc.text('SERVIÇO REALIZADO', colX, ry);
+  ry += 5;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(15, 23, 42);
+  const descricaoServico = (ctx && ctx.descricao) || document.getElementById('osDescricao')?.value || '-';
+  doc.text(doc.splitTextToSize(descricaoServico, larguraUtil - 12), colX, ry);
+
+  y += alturaResumo + 12;
+
+  // Benefícios
+  if (beneficios.length) {
+    y = garantirEspaco(y, 10 + beneficios.length * 6);
+    relatorioTituloSecao(doc, 'Benefícios do serviço prestado', margem, y, larguraUtil);
+    y += 9;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10.5);
+    doc.setTextColor(30, 41, 59);
+    beneficios.forEach((b) => {
+      y = garantirEspaco(y, 7);
+      doc.setFillColor(16, 163, 74);
+      doc.circle(margem + 1.5, y - 1.3, 1.5, 'F');
+      doc.text(b, margem + 6, y);
+      y += 6.5;
+    });
+    y += 4;
+  }
+
+  // Registro fotográfico
+  const pares = Math.max(osRelatorioFotos.antes.length, osRelatorioFotos.depois.length);
+  if (pares > 0) {
+    y = garantirEspaco(y, 14);
+    relatorioTituloSecao(doc, 'Registro fotográfico', margem, y, larguraUtil);
+    y += 10;
+
+    const larguraFoto = (larguraUtil - 6) / 2;
+    const alturaFoto = 62;
+
+    for (let i = 0; i < pares; i++) {
+      y = garantirEspaco(y, alturaFoto + 12);
+      const antes = osRelatorioFotos.antes[i];
+      const depois = osRelatorioFotos.depois[i];
+      [
+        { foto: antes, x: margem, label: 'ANTES', cor: [100, 116, 139] },
+        { foto: depois, x: margem + larguraFoto + 6, label: 'DEPOIS', cor: [16, 163, 74] }
+      ].forEach(({ foto, x, label, cor }) => {
+        doc.setFillColor(241, 245, 249);
+        doc.setDrawColor(226, 232, 240);
+        doc.roundedRect(x, y, larguraFoto, alturaFoto, 2, 2, 'FD');
+        if (foto) {
+          const proporcaoCaixa = larguraFoto / alturaFoto;
+          let w = larguraFoto, h = alturaFoto;
+          if (foto.proporcao > proporcaoCaixa) { h = larguraFoto / foto.proporcao; } else { w = alturaFoto * foto.proporcao; }
+          const offX = x + (larguraFoto - w) / 2;
+          const offY = y + (alturaFoto - h) / 2;
+          doc.addImage(foto.dataUrl, 'JPEG', offX, offY, w, h);
+        }
+        relatorioDesenharPill(doc, label, x + 3, y + 3, cor, [255, 255, 255]);
+      });
+      y += alturaFoto + 8;
+    }
+    y += 2;
+  }
+
+  // Observações do técnico
+  if (observacao) {
+    y = garantirEspaco(y, 20);
+    relatorioTituloSecao(doc, 'Observações do técnico', margem, y, larguraUtil);
+    y += 9;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10.5);
+    doc.setTextColor(30, 41, 59);
+    const linhasObs = doc.splitTextToSize(observacao, larguraUtil - 4);
+    y = garantirEspaco(y, linhasObs.length * 5.5 + 4);
+    doc.text(linhasObs, margem, y);
+    y += linhasObs.length * 5.5 + 6;
+  }
+
+  // Bloco de agradecimento / próximos passos
+  y = garantirEspaco(y, 32);
+  doc.setFillColor(239, 246, 255);
+  doc.setDrawColor(191, 219, 254);
+  doc.roundedRect(margem, y, larguraUtil, 28, 3, 3, 'FD');
+  doc.setFillColor(37, 99, 235);
+  doc.rect(margem, y, 2.2, 28, 'F');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
-  doc.text('Obrigado pela confiança!', margem, y);
-  y += 7;
+  doc.setTextColor(29, 78, 216);
+  doc.text('Obrigado pela confiança!', margem + 8, y + 9);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  const agradecimento = 'Foi um prazer cuidar do seu serviço. Em seguida enviaremos o link de pagamento e/ou a chave Pix para a finalização.';
-  const linhas = doc.splitTextToSize(agradecimento, larguraPagina - margem * 2);
-  doc.text(linhas, margem, y);
+  doc.setFontSize(9.5);
+  doc.setTextColor(51, 65, 85);
+  const textoAgradecimento = 'Foi um prazer cuidar do seu serviço. Em seguida enviaremos o link de pagamento e/ou a chave Pix para a finalização.';
+  doc.text(doc.splitTextToSize(textoAgradecimento, larguraUtil - 12), margem + 8, y + 16);
 
+  // Rodapé em todas as páginas
   const totalPaginas = doc.internal.getNumberOfPages();
   for (let p = 1; p <= totalPaginas; p++) {
     doc.setPage(p);
+    doc.setDrawColor(226, 232, 240);
+    doc.line(margem, altura - 14, largura - margem, altura - 14);
     doc.setFontSize(8);
-    doc.setTextColor(150);
-    doc.text('feito no Cosmos Pro', larguraPagina - margem, alturaPagina - 8, { align: 'right' });
+    doc.setTextColor(148, 163, 184);
+    doc.text('feito no Cosmos Pro', margem, altura - 9);
+    doc.text(`Página ${p} de ${totalPaginas}`, largura - margem, altura - 9, { align: 'right' });
   }
 
   const nomeArquivo = `relatorio-${((cliente && cliente.nome) || 'servico').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${new Date().toISOString().slice(0, 10)}.pdf`;
