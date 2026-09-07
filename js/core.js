@@ -30,6 +30,9 @@ async function sair() {
   window.location.href = "login.html";
 }
 
+let modoFuncionario = false;
+let funcionarioNome = '';
+
 async function iniciar() {
   try {
     document.documentElement.setAttribute('data-tema', localStorage.getItem(TEMA_ESCURO_KEY) === '1' ? 'escuro' : 'claro');
@@ -41,6 +44,17 @@ async function iniciar() {
     if (error) throw error;
 
     if (!empresa) {
+      // Antes de criar uma empresa nova, verifica se esse login é de um FUNCIONÁRIO
+      const { data: funcionario } = await supabaseClient.from('funcionarios').select('nome, empresa_id').eq('user_id', session.user.id).eq('ativo', true).maybeSingle();
+      if (funcionario) {
+        const { data: empresaFuncionario, error: erroEmpresaFunc } = await supabaseClient.from('empresas_visao_funcionario').select('*').eq('id', funcionario.empresa_id).maybeSingle();
+        if (erroEmpresaFunc || !empresaFuncionario) throw new Error('Não foi possível carregar os dados da empresa.');
+        modoFuncionario = true;
+        funcionarioNome = funcionario.nome;
+        empresaAtual = empresaFuncionario;
+        iniciarModoFuncionario();
+        return;
+      }
       const { data: novaEmpresa, error: erroCriacao } = await supabaseClient
         .from("empresas")
         .insert({ user_id: session.user.id, nome_empresa: "Minha Empresa", plano: "gratis", precos: { config: VALORES_PADRAO, dadosEmpresa: DADOS_EMPRESA_PADRAO } })
@@ -59,6 +73,156 @@ async function iniciar() {
   } catch (e) {
     document.getElementById("conteudo").innerHTML = '<div class="card"><p class="msg erro">Não foi possível carregar: ' + e.message + '</p></div>';
   }
+}
+
+let funcAbaAtual = 'os';
+
+function iniciarModoFuncionario() {
+  document.getElementById("nomeEmpresa").textContent = empresaAtual.nome_empresa;
+  document.getElementById("badgePlano").textContent = funcionarioNome + ' · Ajudante';
+
+  const tabsEl = document.querySelector('.tabs');
+  if (tabsEl) {
+    tabsEl.innerHTML = `
+      <div class="tab ativa" data-func-tab="os">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONE_OS}</svg>
+        <span>Ordens de Serviço</span>
+      </div>
+      <div class="tab" data-func-tab="agenda">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span>Agenda</span>
+      </div>
+      <div class="tab" data-func-tab="sair">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        <span>Sair</span>
+      </div>
+    `;
+    tabsEl.querySelectorAll('[data-func-tab]').forEach(el => {
+      el.addEventListener('click', () => {
+        const alvo = el.getAttribute('data-func-tab');
+        if (alvo === 'sair') { sair(); return; }
+        tabsEl.querySelectorAll('.tab').forEach(t => t.classList.remove('ativa'));
+        el.classList.add('ativa');
+        funcAbaAtual = alvo;
+        renderFuncAba();
+      });
+    });
+  }
+  funcAbaAtual = 'os';
+  renderFuncAba();
+}
+
+function renderFuncAba() {
+  if (funcAbaAtual === 'os') renderFuncOsLista();
+  else renderFuncAgenda();
+}
+
+async function renderFuncOsLista() {
+  const conteudo = document.getElementById('conteudo');
+  conteudo.innerHTML = '<div class="card"><p class="vazio">Carregando...</p></div>';
+  const { data: itens, error } = await supabaseClient.from('ordens_servico_funcionario')
+    .select('*')
+    .eq('empresa_id', empresaAtual.id)
+    .order('created_at', { ascending: false });
+  if (error) { conteudo.innerHTML = `<div class="card"><p class="msg erro">Erro ao carregar: ${esc(error.message)}</p></div>`; return; }
+
+  // A view não carrega FK, então busca clientes/agenda à parte e junta aqui
+  const idsClientes = [...new Set((itens || []).map(o => o.cliente_id).filter(Boolean))];
+  const idsAgenda = [...new Set((itens || []).map(o => o.agenda_id).filter(Boolean))];
+  const [{ data: clientesData }, { data: agendaData }] = await Promise.all([
+    idsClientes.length ? supabaseClient.from('clientes').select('id, nome').in('id', idsClientes) : { data: [] },
+    idsAgenda.length ? supabaseClient.from('agenda').select('id, data_hora').in('id', idsAgenda) : { data: [] }
+  ]);
+  const clientesPorId = Object.fromEntries((clientesData || []).map(c => [c.id, c]));
+  const agendaPorId = Object.fromEntries((agendaData || []).map(a => [a.id, a]));
+
+  const statusLabel = { aberta: 'Aberta', em_andamento: 'Em andamento', concluida: 'Concluída' };
+  const statusCor = { aberta: 'agendado', em_andamento: 'agendado', concluida: 'concluido' };
+  conteudo.innerHTML = `
+    <div class="topo" style="margin-bottom:14px;"><h2 style="margin:0;">Ordens de Serviço</h2></div>
+    ${(itens || []).length ? itens.map(o => {
+      const cliente = clientesPorId[o.cliente_id];
+      const compromisso = agendaPorId[o.agenda_id];
+      return `
+      <div class="card lista-item" style="cursor:pointer; margin-bottom:10px;" data-func-os="${o.id}">
+        <div class="info">
+          <div class="titulo-item">${esc(cliente ? cliente.nome : 'Cliente')}</div>
+          <div class="sub-item">${esc(o.descricao || '')}</div>
+          ${compromisso && compromisso.data_hora ? `<div class="sub-item">${new Date(compromisso.data_hora).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</div>` : ''}
+          <span class="status-tag status-${statusCor[o.status] || 'agendado'}">${statusLabel[o.status] || o.status}</span>
+        </div>
+      </div>`;
+    }).join('') : '<div class="card"><p class="vazio">Nenhuma Ordem de Serviço.</p></div>'}
+  `;
+  conteudo.querySelectorAll('[data-func-os]').forEach(el => {
+    el.addEventListener('click', () => renderFuncOsDetalhe(el.getAttribute('data-func-os')));
+  });
+}
+
+async function renderFuncOsDetalhe(osId) {
+  const conteudo = document.getElementById('conteudo');
+  conteudo.innerHTML = '<div class="card"><p class="vazio">Carregando...</p></div>';
+  const { data: os, error } = await supabaseClient.from('ordens_servico_funcionario')
+    .select('*')
+    .eq('id', osId).maybeSingle();
+  if (error || !os) { conteudo.innerHTML = `<div class="card"><p class="msg erro">Não foi possível abrir esta OS.</p></div>`; return; }
+
+  let cliente = null;
+  if (os.cliente_id) {
+    const { data } = await supabaseClient.from('clientes').select('nome, telefone, endereco').eq('id', os.cliente_id).maybeSingle();
+    cliente = data;
+  }
+
+  conteudo.innerHTML = `
+    <span class="voltar-link" id="funcVoltarLista">← Voltar</span>
+    <div class="card">
+      <h3>${esc(cliente ? cliente.nome : 'Cliente')}</h3>
+      ${cliente && cliente.telefone ? `<p class="sub-item">📞 ${esc(cliente.telefone)}</p>` : ''}
+      ${cliente && cliente.endereco ? `<p class="sub-item">📍 ${esc(cliente.endereco)}</p>` : ''}
+      <p style="margin-top:10px;">${esc(os.descricao || '')}</p>
+      <label style="margin-top:14px;">Status do serviço</label>
+      <select id="funcOsStatus">
+        <option value="aberta" ${os.status === 'aberta' ? 'selected' : ''}>Aberta</option>
+        <option value="em_andamento" ${os.status === 'em_andamento' ? 'selected' : ''}>Em andamento</option>
+        <option value="concluida" ${os.status === 'concluida' ? 'selected' : ''}>Concluída</option>
+      </select>
+      <button class="btn" id="funcSalvarStatusBtn" style="margin-top:10px;">Salvar status</button>
+      <div class="msg" id="funcStatusMsg"></div>
+    </div>
+    ${relatorioFotosHtml()}
+  `;
+  document.getElementById('funcVoltarLista').addEventListener('click', renderFuncOsLista);
+  document.getElementById('funcSalvarStatusBtn').addEventListener('click', () => funcSalvarStatus(os.id));
+  ligarEventosRelatorio(os, cliente);
+}
+
+async function funcSalvarStatus(osId) {
+  const msg = document.getElementById('funcStatusMsg');
+  const novoStatus = document.getElementById('funcOsStatus').value;
+  msg.className = 'msg'; msg.textContent = 'Salvando...';
+  const { error } = await supabaseClient.rpc('funcionario_atualizar_status_os', { p_os_id: osId, p_novo_status: novoStatus });
+  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro: ' + error.message; return; }
+  msg.className = 'msg ok'; msg.textContent = 'Status atualizado!';
+}
+
+async function renderFuncAgenda() {
+  const conteudo = document.getElementById('conteudo');
+  conteudo.innerHTML = '<div class="card"><p class="vazio">Carregando...</p></div>';
+  const { data, error } = await supabaseClient.from('agenda')
+    .select('*, clientes(nome)')
+    .eq('empresa_id', empresaAtual.id)
+    .order('data_hora', { ascending: true });
+  if (error) { conteudo.innerHTML = `<div class="card"><p class="msg erro">Erro ao carregar: ${esc(error.message)}</p></div>`; return; }
+  const itens = data || [];
+  conteudo.innerHTML = `
+    <div class="topo" style="margin-bottom:14px;"><h2 style="margin:0;">Agenda</h2></div>
+    ${itens.length ? itens.map(a => `
+      <div class="card" style="margin-bottom:10px;">
+        <div class="titulo-item">${esc(a.titulo || (a.clientes ? a.clientes.nome : 'Compromisso'))}</div>
+        <div class="sub-item">${a.data_hora ? new Date(a.data_hora).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : ''}</div>
+      </div>
+    `).join('') : '<div class="card"><p class="vazio">Nenhum compromisso.</p></div>'}
+  `;
 }
 
 function ativarTab(nome) {
@@ -120,6 +284,26 @@ function mostrarAba(nome) {
         `}
       `)}
 
+      ${ajustesSecaoHtml('equipe', 'Equipe', ICONE_CLIENTE_MAIS, 'chip-azul', `
+        ${temAcessoCompleto() ? `
+        <p class="note" style="margin-top:-4px;">Crie logins pra seus ajudantes de campo. Eles só enxergam Ordens de Serviço e Agenda — sem ver valores, sem poder excluir nada.</p>
+        <div id="listaFuncionarios"><p class="vazio">Carregando...</p></div>
+        <div style="border-top:1px solid var(--cinza-linha); margin:16px 0 14px;"></div>
+        <h4 style="margin:0 0 8px;">Adicionar novo ajudante</h4>
+        <label>Nome</label>
+        <input type="text" id="novoFuncNome" placeholder="Nome do ajudante">
+        <label>E-mail de login</label>
+        <input type="text" id="novoFuncEmail" placeholder="email@exemplo.com">
+        <label>Senha inicial</label>
+        <input type="text" id="novoFuncSenha" placeholder="Mínimo 6 caracteres">
+        <button class="btn btn-secundario" id="btnCriarFuncionario" style="margin-top:10px;">Criar acesso</button>
+        <div class="msg" id="msgFuncionario"></div>
+        ` : `
+        <p class="note" style="margin-top:-4px;">Crie logins pra seus ajudantes de campo, com acesso limitado a Ordens de Serviço e Agenda. Recurso exclusivo do Plano Completo.</p>
+        <span class="badge-plano">Plano Completo</span>
+        `}
+      `)}
+
       ${ajustesSecaoHtml('backup', 'Dados e backup', ICONE_DOWNLOAD, 'chip-azul', `
         <p class="note" style="margin-top:-4px;">Seus dados e os dos seus clientes são seus — baixe uma cópia sempre que quiser, pra guardar ou levar pra outro lugar.</p>
         <button class="btn btn-secundario" id="btnBackupCompleto">Baixar backup completo (JSON)</button>
@@ -150,6 +334,8 @@ function mostrarAba(nome) {
     document.getElementById('btnBackupCompleto').addEventListener('click', baixarBackupCompleto);
     document.getElementById('btnExportarClientes').addEventListener('click', exportarClientesCsv);
     document.getElementById('btnExportarOS').addEventListener('click', exportarOsCsv);
+    document.getElementById('btnCriarFuncionario')?.addEventListener('click', criarFuncionario);
+    if (temAcessoCompleto()) carregarListaFuncionarios();
     ligarTogglesAjustes(conteudo);
   }
 }
@@ -257,6 +443,61 @@ async function exportarOsCsv() {
   ]);
   baixarArquivo(`ordens-de-servico-${new Date().toISOString().slice(0, 10)}.csv`, '\uFEFF' + csv, 'text/csv;charset=utf-8;');
   msg.className = 'msg ok'; msg.textContent = 'Download iniciado!';
+}
+
+async function carregarListaFuncionarios() {
+  const el = document.getElementById('listaFuncionarios');
+  if (!el) return;
+  const { data, error } = await supabaseClient.from('funcionarios').select('*').eq('empresa_id', empresaAtual.id).order('created_at');
+  if (error) { el.innerHTML = `<p class="msg erro">Erro ao carregar.</p>`; return; }
+  const itens = data || [];
+  el.innerHTML = itens.length ? itens.map(f => `
+    <div class="lista-item" style="display:flex; justify-content:space-between; align-items:center;">
+      <div class="info">
+        <div class="titulo-item">${esc(f.nome)}</div>
+        <span class="status-tag status-${f.ativo ? 'concluido' : 'cancelado'}">${f.ativo ? 'Ativo' : 'Inativo'}</span>
+      </div>
+      <button class="icon-btn" data-toggle-func="${f.id}" data-ativo="${f.ativo}" title="${f.ativo ? 'Desativar' : 'Reativar'}">
+        ${f.ativo
+          ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg>'
+          : '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'}
+      </button>
+    </div>
+  `).join('') : '<p class="vazio">Nenhum ajudante cadastrado ainda.</p>';
+  el.querySelectorAll('[data-toggle-func]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-toggle-func');
+      const ativoAtual = btn.getAttribute('data-ativo') === 'true';
+      await supabaseClient.from('funcionarios').update({ ativo: !ativoAtual }).eq('id', id);
+      carregarListaFuncionarios();
+    });
+  });
+}
+
+async function criarFuncionario() {
+  const msg = document.getElementById('msgFuncionario');
+  const nome = document.getElementById('novoFuncNome').value.trim();
+  const email = document.getElementById('novoFuncEmail').value.trim();
+  const senha = document.getElementById('novoFuncSenha').value;
+  if (!nome || !email || !senha) { msg.className = 'msg erro'; msg.textContent = 'Preencha nome, e-mail e senha.'; return; }
+  msg.className = 'msg'; msg.textContent = 'Criando acesso...';
+  try {
+    const { data, error } = await supabaseClient.functions.invoke('criar-funcionario', { body: { nome, email, senha } });
+    if (error) {
+      let corpo = null;
+      try { corpo = await error.context?.json(); } catch (_) { /* corpo não era JSON */ }
+      msg.className = 'msg erro'; msg.textContent = 'Erro: ' + (corpo?.error || error.message);
+      return;
+    }
+    if (data?.error) { msg.className = 'msg erro'; msg.textContent = 'Erro: ' + data.error; return; }
+    msg.className = 'msg ok'; msg.textContent = `Acesso criado! Repasse o e-mail e a senha pro(a) ${nome}.`;
+    document.getElementById('novoFuncNome').value = '';
+    document.getElementById('novoFuncEmail').value = '';
+    document.getElementById('novoFuncSenha').value = '';
+    carregarListaFuncionarios();
+  } catch (e) {
+    msg.className = 'msg erro'; msg.textContent = 'Erro de conexão: ' + e.message;
+  }
 }
 
 async function salvarAsaasKeyCliente() {
@@ -1760,8 +2001,7 @@ async function relatorioGerarPdf(ctx, cliente) {
   const beneficioExtra = document.getElementById('osBeneficioExtra')?.value.trim();
   if (beneficioExtra) beneficios.push(beneficioExtra);
   const observacao = document.getElementById('osObservacaoTecnico')?.value.trim();
-  const emp = empresaAtual.precos.dadosEmpresa || {};
-
+  const emp = (empresaAtual.precos && empresaAtual.precos.dadosEmpresa) || {};
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const largura = doc.internal.pageSize.getWidth();

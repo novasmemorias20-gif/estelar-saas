@@ -33,6 +33,7 @@ export function renderStatusAssinatura(){
     { nome: 'Contratos de manutenção (PMOC)', gratis: false, basico: false, completo: true },
     { nome: 'Cobrança PIX pro cliente', gratis: false, basico: false, completo: true },
     { nome: 'Relatório de serviço em PDF', gratis: false, basico: false, completo: true },
+    { nome: 'Conta de ajudante (acesso limitado)', gratis: false, basico: false, completo: true },
   ];
   el.innerHTML = `
     <div style="margin-bottom:14px;">
