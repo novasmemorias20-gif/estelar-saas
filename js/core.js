@@ -265,6 +265,12 @@ function mostrarAba(nome) {
         <div id="statusVinculoGoogle" class="sub-item">Verificando...</div>
         <button class="btn btn-secundario" id="btnVincularGoogle">Vincular conta Google</button>
         <div class="msg" id="msgVinculoGoogle"></div>
+        <div style="border-top:1px solid var(--cinza-linha); margin:18px 0 14px;"></div>
+        <h4 style="margin:0 0 6px;">Google Agenda</h4>
+        <p class="note" style="margin-top:-4px;">Conecte pra que cada compromisso criado aqui vire um evento no seu Google Agenda automaticamente — as notificações vêm direto do app do Google, em tempo real.</p>
+        <div id="statusGoogleAgenda" class="sub-item">Verificando...</div>
+        <button class="btn btn-secundario" id="btnConectarGoogleAgenda">Conectar Google Agenda</button>
+        <div class="msg" id="msgGoogleAgenda"></div>
         <button class="btn btn-secundario" onclick="sair()" style="color:var(--erro); border-color:var(--erro); margin-top:16px;">Sair da conta</button>
       `)}
 
@@ -328,6 +334,7 @@ function mostrarAba(nome) {
     carregarStatusGoogle();
     renderStatusAssinatura();
     document.getElementById('btnVincularGoogle').addEventListener('click', vincularGoogle);
+    document.getElementById('btnConectarGoogleAgenda')?.addEventListener('click', conectarGoogleAgenda);
     document.getElementById('chkTemaEscuro').checked = localStorage.getItem(TEMA_ESCURO_KEY) === '1';
     document.getElementById('chkTemaEscuro').addEventListener('change', (e) => aplicarTema(e.target.checked));
     document.getElementById('btnSalvarAsaasKeyCliente')?.addEventListener('click', salvarAsaasKeyCliente);
@@ -522,6 +529,18 @@ async function carregarStatusGoogle() {
     statusEl.textContent = 'Nenhuma conta Google vinculada ainda.';
     btnEl.classList.remove('hidden');
   }
+
+  const statusAgendaEl = document.getElementById('statusGoogleAgenda');
+  const btnAgendaEl = document.getElementById('btnConectarGoogleAgenda');
+  if (statusAgendaEl && btnAgendaEl) {
+    if (empresaAtual.google_calendar_refresh_token) {
+      statusAgendaEl.innerHTML = '<span class="status-tag status-concluido">Google Agenda conectado</span>';
+      btnAgendaEl.textContent = 'Reconectar Google Agenda';
+    } else {
+      statusAgendaEl.textContent = 'Ainda não conectado.';
+      btnAgendaEl.textContent = 'Conectar Google Agenda';
+    }
+  }
 }
 
 async function vincularGoogle() {
@@ -532,6 +551,28 @@ async function vincularGoogle() {
     options: { redirectTo: window.location.origin + '/painel.html' }
   });
   if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao vincular: ' + error.message; }
+}
+
+async function conectarGoogleAgenda() {
+  const msg = document.getElementById('msgGoogleAgenda');
+  msg.className = 'msg'; msg.textContent = 'Redirecionando para o Google...';
+  const opcoes = {
+    provider: 'google',
+    options: {
+      redirectTo: window.location.origin + '/painel.html',
+      scopes: 'https://www.googleapis.com/auth/calendar.events',
+      queryParams: { access_type: 'offline', prompt: 'consent' }
+    }
+  };
+  let { error } = await supabaseClient.auth.linkIdentity(opcoes);
+  if (error && /already linked|identity.*exists/i.test(error.message)) {
+    // Já tinha a conta Google vinculada (só pra login, sem acesso à agenda) —
+    // desvincula e vincula de novo, dessa vez já pedindo a permissão de agenda.
+    await supabaseClient.auth.unlinkIdentity({ provider: 'google' }).catch(() => {});
+    const retry = await supabaseClient.auth.linkIdentity(opcoes);
+    error = retry.error;
+  }
+  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao conectar: ' + error.message; }
 }
 
 
@@ -589,16 +630,14 @@ function osStatusCardHtml(status, itens) {
     em_andamento: { titulo: 'Em andamento', cor: 'ambar', tag: 'agendado' },
     concluida: { titulo: 'Concluída', cor: 'verde', tag: 'concluido' }
   }[status];
-  const total = itens.reduce((s, o) => s + (parseFloat(o.valor) || 0), 0);
   return `
     <div class="os-status-card os-status-${config.cor}" data-os-status-card="${status}">
       <div class="os-status-cabecalho" data-os-status-toggle="${status}">
         <div class="os-status-info">
           <span class="status-tag status-${config.tag}">${config.titulo}</span>
-          <span class="os-status-total">${money(total)}</span>
         </div>
         <div class="os-status-contagem-wrap">
-          <span class="contagem">${itens.length}</span>
+          <span class="os-status-contagem-destaque">${itens.length}</span>
           <svg class="os-status-seta" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
       </div>
@@ -1362,12 +1401,14 @@ async function clSalvarNovo() {
 
 async function clExcluir(id) {
   if (!confirm('Excluir este cliente? Isso também apaga os orçamentos, agendamentos, ordens de serviço e contratos vinculados a ele. Essa ação não pode ser desfeita.')) return;
+  const { data: agendaDoCliente } = await supabaseClient.from('agenda').select('google_event_id').eq('cliente_id', id).not('google_event_id', 'is', null);
   await supabaseClient.from('ordens_servico').delete().eq('cliente_id', id);
   await supabaseClient.from('agenda').delete().eq('cliente_id', id);
   await supabaseClient.from('orcamentos').delete().eq('cliente_id', id);
   await supabaseClient.from('contratos').delete().eq('cliente_id', id);
   const { error } = await supabaseClient.from('clientes').delete().eq('id', id);
   if (error) { alert('Erro ao excluir cliente.'); return; }
+  (agendaDoCliente || []).forEach(a => sincronizarGoogleCalendar({ acao: 'excluir', empresaId: empresaAtual.id, googleEventId: a.google_event_id }));
   await clCarregarLista();
 }
 
@@ -1434,21 +1475,27 @@ async function agSalvarNovo() {
   const msg = document.getElementById('agMsg');
   if (!titulo || !dataHora) { msg.className = 'msg erro'; msg.textContent = 'Preencha título e data/hora.'; return; }
   const clienteId = document.getElementById('agCliente').value || null;
-  const { error } = await supabaseClient.from('agenda').insert({
+  const { data: novoAg, error } = await supabaseClient.from('agenda').insert({
     empresa_id: empresaAtual.id,
     cliente_id: clienteId,
     titulo,
     tipo: document.getElementById('agTipo').value,
     data_hora: new Date(dataHora).toISOString(),
     observacoes: document.getElementById('agObs').value.trim()
-  });
+  }).select().single();
   if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar.'; return; }
+  sincronizarGoogleCalendar({ acao: 'criar', agendaId: novoAg.id });
   const dataObj = new Date(dataHora);
   ['agTitulo', 'agDataHora', 'agObs'].forEach(id => document.getElementById(id).value = '');
   msg.className = 'msg ok'; msg.textContent = 'Adicionado!';
   agModo = 'calendario';
   agCalendarRef = new Date(dataObj.getFullYear(), dataObj.getMonth(), 1);
   await agAtualizarDinamico();
+}
+
+function sincronizarGoogleCalendar(payload) {
+  // Melhor esforço: nunca trava a ação principal se o Google falhar ou não estiver conectado
+  supabaseClient.functions.invoke('sync-google-calendar', { body: payload }).catch(e => console.warn('Sync Google Agenda falhou:', e));
 }
 
 function agTipoLabel(t) {
@@ -1561,15 +1608,20 @@ async function cpSalvar() {
     observacoes: document.getElementById('cpObs').value.trim()
   }).eq('id', agAgendaSelecionadaId);
   if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar.'; return; }
+  sincronizarGoogleCalendar({ acao: 'atualizar', agendaId: agAgendaSelecionadaId });
   msg.className = 'msg ok'; msg.textContent = 'Salvo!';
 }
 
 async function cpExcluir() {
   if (!confirm('Excluir este compromisso? Se houver uma Ordem de Serviço vinculada, ela deixará de estar associada a um agendamento, mas não será apagada. Essa ação não pode ser desfeita.')) return;
   const msg = document.getElementById('cpMsg');
+  const { data: agAntiga } = await supabaseClient.from('agenda').select('google_event_id').eq('id', agAgendaSelecionadaId).maybeSingle();
   await supabaseClient.from('ordens_servico').update({ agenda_id: null }).eq('agenda_id', agAgendaSelecionadaId);
   const { error } = await supabaseClient.from('agenda').delete().eq('id', agAgendaSelecionadaId);
   if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao excluir.'; return; }
+  if (agAntiga && agAntiga.google_event_id) {
+    sincronizarGoogleCalendar({ acao: 'excluir', empresaId: empresaAtual.id, googleEventId: agAntiga.google_event_id });
+  }
   agModo = 'dia';
   agAtualizarDinamico();
 }
@@ -2259,6 +2311,7 @@ async function osCriarCompromissoVinculado(osId, dataHoraStr) {
     observacoes: ''
   }).select().single();
   if (error) return { error };
+  sincronizarGoogleCalendar({ acao: 'criar', agendaId: novoCompromisso.id });
   await supabaseClient.from('ordens_servico').update({ agenda_id: novoCompromisso.id }).eq('id', osId);
   osContexto.agendaId = novoCompromisso.id;
   return { data: novoCompromisso };
@@ -3311,5 +3364,14 @@ try {
 window.sair = sair;
 window.salvarDadosEmpresa = salvarDadosEmpresa;
 
+
+supabaseClient.auth.onAuthStateChange(async (event, session) => {
+  if (session && session.provider_token && session.provider_refresh_token && empresaAtual) {
+    // Acabou de voltar do consentimento do Google com um refresh token novo —
+    // é o momento (e o único) em que esse valor fica disponível pra gente salvar.
+    await supabaseClient.from('empresas').update({ google_calendar_refresh_token: session.provider_refresh_token }).eq('id', empresaAtual.id);
+    empresaAtual.google_calendar_refresh_token = session.provider_refresh_token;
+  }
+});
 
 iniciar();
