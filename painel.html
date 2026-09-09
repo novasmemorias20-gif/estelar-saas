@@ -258,8 +258,8 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
 .os-status-card:last-child { margin-bottom: 0; }
 .os-status-cabecalho { display: flex; justify-content: space-between; align-items: center; padding: 13px 15px; cursor: pointer; }
 .os-status-info { display: flex; align-items: center; gap: 10px; }
-.os-status-total { font-weight: 800; font-family: "Manrope", sans-serif; font-size: 14px; color: var(--escuro); }
 .os-status-contagem-wrap { display: flex; align-items: center; gap: 6px; color: var(--cinza-texto); }
+.os-status-contagem-destaque { font-weight: 800; font-family: "Manrope", sans-serif; font-size: 20px; color: var(--escuro); line-height: 1; }
 .os-status-seta { transition: transform .15s; }
 .os-status-card.aberto .os-status-seta { transform: rotate(180deg); }
 .os-status-corpo { padding: 0 15px 13px; }
@@ -285,9 +285,12 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
 <body>
 <div class="container">
   <div class="topo">
-    <div>
-      <h2 id="nomeEmpresa" style="margin-bottom: 4px;">Carregando...</h2>
-      <span class="badge-plano" id="badgePlano">...</span>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <img src="icon-192.png" alt="Cosmos Clima" style="width:34px; height:34px; border-radius:9px; flex-shrink:0;">
+      <div>
+        <h2 id="nomeEmpresa" style="margin-bottom: 4px;">Carregando...</h2>
+        <span class="badge-plano" id="badgePlano">...</span>
+      </div>
     </div>
   </div>
 
