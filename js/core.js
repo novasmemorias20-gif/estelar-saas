@@ -3,6 +3,8 @@ const SUPABASE_URL = "https://lkankciqsldutuncuvyl.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_QAzF6HlUkYoAumTQCzKuVg_FEmhtwQ8";
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+const GOOGLE_AGENDA_HABILITADO = false; // true quando o app passar pela verificação do Google
+
 function temAcessoCompleto() {
   if (!empresaAtual) return false;
   if (empresaAtual.cortesia) return true;
@@ -260,17 +262,40 @@ function mostrarAba(nome) {
         <div class="msg" id="msgConfig"></div>
       `, true)}
 
-      ${ajustesSecaoHtml('conta', 'Conta e segurança', ICONE_CADEADO, 'chip-verde', `
+      ${ajustesSecaoHtml('conta', 'Conta e equipe', ICONE_CADEADO, 'chip-verde', `
         <p class="note" style="margin-top:-4px;">Vincule sua conta Google pra também poder entrar com ela, além do e-mail e senha.</p>
         <div id="statusVinculoGoogle" class="sub-item">Verificando...</div>
         <button class="btn btn-secundario" id="btnVincularGoogle">Vincular conta Google</button>
         <div class="msg" id="msgVinculoGoogle"></div>
         <div style="border-top:1px solid var(--cinza-linha); margin:18px 0 14px;"></div>
         <h4 style="margin:0 0 6px;">Google Agenda</h4>
+        ${GOOGLE_AGENDA_HABILITADO ? `
         <p class="note" style="margin-top:-4px;">Conecte pra que cada compromisso criado aqui vire um evento no seu Google Agenda automaticamente — as notificações vêm direto do app do Google, em tempo real.</p>
         <div id="statusGoogleAgenda" class="sub-item">Verificando...</div>
         <button class="btn btn-secundario" id="btnConectarGoogleAgenda">Conectar Google Agenda</button>
         <div class="msg" id="msgGoogleAgenda"></div>
+        ` : `
+        <p class="note" style="margin-top:-4px;">Sincronização automática com o Google Agenda — <b>em breve</b>.</p>
+        `}
+        <div style="border-top:1px solid var(--cinza-linha); margin:18px 0 14px;"></div>
+        <h4 style="margin:0 0 8px;">Equipe</h4>
+        ${temAcessoCompleto() ? `
+        <p class="note" style="margin-top:-4px;">Crie logins pra seus ajudantes de campo. Eles só enxergam Ordens de Serviço e Agenda — sem ver valores, sem poder excluir nada.</p>
+        <div id="listaFuncionarios"><p class="vazio">Carregando...</p></div>
+        <div style="border-top:1px solid var(--cinza-linha); margin:16px 0 14px;"></div>
+        <h4 style="margin:0 0 8px;">Adicionar novo ajudante</h4>
+        <label>Nome</label>
+        <input type="text" id="novoFuncNome" placeholder="Nome do ajudante">
+        <label>E-mail de login</label>
+        <input type="text" id="novoFuncEmail" placeholder="email@exemplo.com">
+        <label>Senha inicial</label>
+        <input type="text" id="novoFuncSenha" placeholder="Mínimo 6 caracteres">
+        <button class="btn btn-secundario" id="btnCriarFuncionario" style="margin-top:10px;">Criar acesso</button>
+        <div class="msg" id="msgFuncionario"></div>
+        ` : `
+        <p class="note" style="margin-top:-4px;">Crie logins pra seus ajudantes de campo, com acesso limitado a Ordens de Serviço e Agenda. Recurso exclusivo do Plano Completo.</p>
+        <span class="badge-plano">Plano Completo</span>
+        `}
         <button class="btn btn-secundario" onclick="sair()" style="color:var(--erro); border-color:var(--erro); margin-top:16px;">Sair da conta</button>
       `)}
 
@@ -290,24 +315,11 @@ function mostrarAba(nome) {
         `}
       `)}
 
-      ${ajustesSecaoHtml('equipe', 'Equipe', ICONE_CLIENTE_MAIS, 'chip-azul', `
-        ${temAcessoCompleto() ? `
-        <p class="note" style="margin-top:-4px;">Crie logins pra seus ajudantes de campo. Eles só enxergam Ordens de Serviço e Agenda — sem ver valores, sem poder excluir nada.</p>
-        <div id="listaFuncionarios"><p class="vazio">Carregando...</p></div>
-        <div style="border-top:1px solid var(--cinza-linha); margin:16px 0 14px;"></div>
-        <h4 style="margin:0 0 8px;">Adicionar novo ajudante</h4>
-        <label>Nome</label>
-        <input type="text" id="novoFuncNome" placeholder="Nome do ajudante">
-        <label>E-mail de login</label>
-        <input type="text" id="novoFuncEmail" placeholder="email@exemplo.com">
-        <label>Senha inicial</label>
-        <input type="text" id="novoFuncSenha" placeholder="Mínimo 6 caracteres">
-        <button class="btn btn-secundario" id="btnCriarFuncionario" style="margin-top:10px;">Criar acesso</button>
-        <div class="msg" id="msgFuncionario"></div>
-        ` : `
-        <p class="note" style="margin-top:-4px;">Crie logins pra seus ajudantes de campo, com acesso limitado a Ordens de Serviço e Agenda. Recurso exclusivo do Plano Completo.</p>
-        <span class="badge-plano">Plano Completo</span>
-        `}
+      ${ajustesSecaoHtml('indicacao', 'Indique um amigo', ICONE_CORACAO, 'chip-verde', `
+        <p class="note" style="margin-top:-4px;">Conhece outro profissional de climatização que também vive apagando incêndio com caderninho e agenda no WhatsApp? Manda o Cosmos Clima pra ele — quanto mais gente da área usando, melhor a gente consegue deixar isso pra todo mundo.</p>
+        <button class="btn btn-secundario" id="btnCompartilharWhatsapp">Compartilhar no WhatsApp</button>
+        <button class="btn btn-secundario" id="btnCopiarLinkIndicacao" style="margin-top:8px;">Copiar link</button>
+        <div class="msg" id="msgIndicacao"></div>
       `)}
 
       ${ajustesSecaoHtml('backup', 'Dados e backup', ICONE_DOWNLOAD, 'chip-azul', `
@@ -342,6 +354,8 @@ function mostrarAba(nome) {
     document.getElementById('btnExportarClientes').addEventListener('click', exportarClientesCsv);
     document.getElementById('btnExportarOS').addEventListener('click', exportarOsCsv);
     document.getElementById('btnCriarFuncionario')?.addEventListener('click', criarFuncionario);
+    document.getElementById('btnCompartilharWhatsapp')?.addEventListener('click', compartilharIndicacaoWhatsapp);
+    document.getElementById('btnCopiarLinkIndicacao')?.addEventListener('click', copiarLinkIndicacao);
     if (temAcessoCompleto()) carregarListaFuncionarios();
     ligarTogglesAjustes(conteudo);
   }
@@ -505,6 +519,23 @@ async function criarFuncionario() {
   } catch (e) {
     msg.className = 'msg erro'; msg.textContent = 'Erro de conexão: ' + e.message;
   }
+}
+
+const LINK_INDICACAO = 'https://app.estelarbrasil.com.br/landing.html';
+
+function compartilharIndicacaoWhatsapp() {
+  const texto = `Ei! Uso um sistema chamado Cosmos Clima pra organizar orçamento, agenda e financeiro da minha empresa de climatização — resolveu muita dor de cabeça aqui. Dá uma olhada: ${LINK_INDICACAO}`;
+  window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank');
+}
+
+function copiarLinkIndicacao() {
+  const msg = document.getElementById('msgIndicacao');
+  const ta = document.createElement('textarea');
+  ta.value = LINK_INDICACAO;
+  document.body.appendChild(ta); ta.select();
+  try { navigator.clipboard.writeText(ta.value); } catch (e) { try { document.execCommand('copy'); } catch (e2) {} }
+  document.body.removeChild(ta);
+  msg.className = 'msg ok'; msg.textContent = 'Link copiado!';
 }
 
 async function salvarAsaasKeyCliente() {
@@ -688,6 +719,7 @@ const ICONE_CADEADO = '<rect x="3" y="11" width="18" height="11" rx="2"/><path d
 const ICONE_DOWNLOAD = '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>';
 const ICONE_SLIDERS = '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>';
 const ICONE_LIVRO = '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>';
+const ICONE_CORACAO = '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>';
 
 async function renderInicio() {
   const conteudo = document.getElementById("conteudo");
