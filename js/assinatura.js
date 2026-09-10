@@ -24,6 +24,9 @@ export function renderStatusAssinatura(){
   const statusLabel = ASSINATURA_STATUS_LABEL[statusAtual] || statusAtual;
   const corStatus = statusAtual === 'ativa' ? 'concluido' : (statusAtual === 'atrasada' || statusAtual === 'cancelada' ? 'cancelado' : 'agendado');
   const nomePlanoAtual = { completo: 'Plano Completo', basico: 'Plano Básico' }[empresaAtual.plano] || 'Plano Grátis';
+  const trialAtivo = !!(empresaAtual.trial_completo_expira_em && new Date(empresaAtual.trial_completo_expira_em) > new Date());
+  const diasTrial = trialAtivo ? Math.max(1, Math.ceil((new Date(empresaAtual.trial_completo_expira_em) - new Date()) / 86400000)) : 0;
+  const trialElegivel = !trialAtivo && !empresaAtual.trial_completo_usado && empresaAtual.plano !== 'completo';
   const TABELA_PLANOS = [
     { nome: 'Clientes', gratis: 'Até 10', basico: 'Ilimitado', completo: 'Ilimitado' },
     { nome: 'Orçamentos', gratis: true, basico: true, completo: true },
@@ -40,6 +43,16 @@ export function renderStatusAssinatura(){
       <span class="badge-plano">${nomePlanoAtual}</span>
       ${empresaAtual.plano !== 'gratis' ? `<span class="status-tag status-${corStatus}" style="margin-left:6px;">${statusLabel}</span>` : ''}
     </div>
+    ${trialAtivo ? `
+    <div style="background:var(--azul-tinta); border:1px solid #bfdbfe; border-radius:12px; padding:12px 14px; margin-bottom:16px; font-size:13px;">
+      🚀 Você está testando o <b>Completo</b> — faltam <b>${diasTrial} dia${diasTrial > 1 ? 's' : ''}</b>. Gostou? Assine abaixo pra não perder o acesso.
+    </div>
+    ` : trialElegivel ? `
+    <div style="background:var(--azul-tinta); border:1px solid #bfdbfe; border-radius:12px; padding:12px 14px; margin-bottom:16px; font-size:13px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+      <span>🚀 Nunca testou o <b>Completo</b>? Experimente 14 dias grátis, sem cartão.</span>
+      <button class="btn btn-secundario" id="btnIniciarTrialAssinatura" style="margin:0; width:auto; padding:8px 14px; font-size:12.5px;">Testar grátis</button>
+    </div>
+    ` : ''}
     <div style="overflow-x:auto; margin-bottom:16px;">
       <table style="width:100%; border-collapse:collapse; font-size:12px; min-width:420px;">
         <thead><tr><th></th><th>Grátis</th><th>Básico</th><th>Completo</th></tr></thead>
@@ -61,6 +74,7 @@ export function renderStatusAssinatura(){
   document.getElementById('assinaturaCiclo').addEventListener('change', atualizarPrecosExibidos);
   document.getElementById('btnAssinarBasico').addEventListener('click', () => assinarPlano('basico'));
   document.getElementById('btnAssinarCompleto').addEventListener('click', () => assinarPlano('completo'));
+  document.getElementById('btnIniciarTrialAssinatura')?.addEventListener('click', () => window.iniciarTrialCompleto && window.iniciarTrialCompleto());
   atualizarPrecosExibidos();
 }
 

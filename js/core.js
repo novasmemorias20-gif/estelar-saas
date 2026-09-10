@@ -8,7 +8,62 @@ const GOOGLE_AGENDA_HABILITADO = false; // true quando o app passar pela verific
 function temAcessoCompleto() {
   if (!empresaAtual) return false;
   if (empresaAtual.cortesia) return true;
+  if (trialCompletoAtivo()) return true;
   return empresaAtual.plano === 'completo' && empresaAtual.assinatura_status === 'ativa';
+}
+
+function trialCompletoAtivo() {
+  return !!(empresaAtual && empresaAtual.trial_completo_expira_em && new Date(empresaAtual.trial_completo_expira_em) > new Date());
+}
+
+function trialCompletoElegivel() {
+  return !!(empresaAtual && !empresaAtual.cortesia && !empresaAtual.trial_completo_usado && empresaAtual.plano !== 'completo');
+}
+
+function diasRestantesTrial() {
+  if (!trialCompletoAtivo()) return 0;
+  const ms = new Date(empresaAtual.trial_completo_expira_em) - new Date();
+  return Math.max(1, Math.ceil(ms / 86400000));
+}
+
+async function iniciarTrialCompleto() {
+  if (!trialCompletoElegivel()) return;
+  const expira = new Date(Date.now() + 14 * 86400000).toISOString();
+  const { error } = await supabaseClient.from('empresas').update({ trial_completo_expira_em: expira, trial_completo_usado: true }).eq('id', empresaAtual.id);
+  if (!error) {
+    empresaAtual.trial_completo_expira_em = expira;
+    empresaAtual.trial_completo_usado = true;
+    mostrarAba('inicio');
+  }
+}
+
+function dispensarTrialBanner() {
+  localStorage.setItem('trialBannerDispensado', '1');
+  document.getElementById('cardTrialCompleto')?.remove();
+}
+
+function trialBannerHtml() {
+  if (trialCompletoAtivo()) {
+    const dias = diasRestantesTrial();
+    return `
+    <div class="card" id="cardTrialCompleto" style="background:linear-gradient(135deg,var(--azul-tinta),#fff); border-color:#bfdbfe;">
+      <h3 style="font-size:15px; margin-bottom:4px;">🚀 Testando o Plano Completo</h3>
+      <p class="note" style="margin-top:0;">Faltam <b>${dias} dia${dias > 1 ? 's' : ''}</b> pra seu teste acabar. Gostou do PMOC, da cobrança PIX e do relatório com fotos?</p>
+      <button class="btn" id="btnVerPlanosTrial" style="margin-top:8px;">Assinar o Completo</button>
+    </div>`;
+  }
+  if (trialCompletoElegivel() && localStorage.getItem('trialBannerDispensado') !== '1') {
+    return `
+    <div class="card" id="cardTrialCompleto" style="background:linear-gradient(135deg,var(--azul-tinta),#fff); border-color:#bfdbfe;">
+      <h3 style="font-size:15px; margin-bottom:4px;">🚀 Teste o Plano Completo por 14 dias</h3>
+      <p class="note" style="margin-top:0;">PMOC, cobrança PIX pro cliente, relatório com fotos e conta de ajudante — sem cartão, sem compromisso.</p>
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <button class="btn" id="btnIniciarTrial" style="margin-top:0; flex:1;">Testar grátis</button>
+        <button class="btn btn-secundario" id="btnDispensarTrial" style="margin-top:0; flex:1;">Agora não</button>
+      </div>
+    </div>`;
+  }
+  return '';
 }
 
 function esc(str) {
@@ -789,6 +844,8 @@ async function renderInicio() {
     <div class="saudacao">${saudacaoAtual()}, ${esc(empresaAtual.nome_empresa)}</div>
     <div class="saudacao-sub">${hoje.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}</div>
 
+    ${trialBannerHtml()}
+
     <div class="atalhos-row">
       <button class="atalho-btn atalho-primario" id="btnAtalhoNovaOS">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONE_OS}</svg>
@@ -841,6 +898,9 @@ async function renderInicio() {
   ligarTogglesOsStatus(conteudo);
   document.getElementById('btnAtalhoNovaOS').addEventListener('click', irParaNovaOS);
   document.getElementById('btnAtalhoNovoCliente').addEventListener('click', irParaNovoClienteAtalho);
+  document.getElementById('btnIniciarTrial')?.addEventListener('click', iniciarTrialCompleto);
+  document.getElementById('btnDispensarTrial')?.addEventListener('click', dispensarTrialBanner);
+  document.getElementById('btnVerPlanosTrial')?.addEventListener('click', () => mostrarAba('config'));
 }
 
 const FINANCEIRO_FILTROS = [
@@ -3386,7 +3446,7 @@ try {
     osAbrirComContexto, clExcluir, renderAgenda, agSalvarNovo, agAtualizarStatus, agAtualizarDinamico, irParaKanbanOS,
     agRenderKanban, cpSalvar, cpExcluir, agRenderCalendario, agRenderDia, voltarDoOS, osCriarCompromissoVinculado,
     osConfirmarAgendamento, osSalvar, osExcluir, renderAvulso, avSalvarOrcamento, avSalvarConfig, novoItemAvulso,
-    renderContrato, ctSalvarContrato, ctExcluirContrato, ctNovoEquip };
+    renderContrato, ctSalvarContrato, ctExcluirContrato, ctNovoEquip, iniciarTrialCompleto };
   Object.entries(_expor).forEach(([k,v])=>{ if(typeof v==='function') window[k]=v; });
   window.empresaAtual = empresaAtual;
   // keep empresaAtual updated via getter
