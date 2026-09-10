@@ -119,6 +119,38 @@ textarea { resize: vertical; min-height: 44px; }
 }
 .topo { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
 .topo .btn { width: auto; margin: 0; padding: 9px 14px; }
+
+/* ===== Modo Desktop ===== */
+.app-shell { display: flex; min-height: 100vh; }
+.sidebar-desktop {
+  display: none; width: 232px; flex-shrink: 0; background: var(--superficie);
+  border-right: 1px solid var(--cinza-linha); padding: 18px 12px; flex-direction: column; gap: 3px;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+}
+.sidebar-marca { display: flex; align-items: center; gap: 10px; padding: 8px 10px 22px; }
+.sidebar-item { display: flex !important; flex-direction: row !important; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; color: var(--cinza-texto); font-weight: 600; font-size: 13.5px; height: auto !important; }
+.sidebar-item span { max-width: none !important; }
+.sidebar-item.ativa { background: var(--azul-tinta); color: var(--azul-escuro) !important; }
+.sidebar-item.ativa svg { filter: none !important; }
+.sidebar-item:hover:not(.ativa) { background: var(--cinza-claro); }
+.sidebar-rodape { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--cinza-linha); }
+.sidebar-toggle-modo { width: 100%; background: none; border: 1px solid var(--cinza-linha); border-radius: 10px; padding: 9px; font-size: 12.5px; color: var(--cinza-texto); cursor: pointer; font-family: inherit; }
+.desktop-main { flex: 1; min-width: 0; }
+#btnAlternarModoTopo { display: none; width: auto; }
+
+body.modo-desktop .sidebar-desktop { display: flex; }
+body.modo-desktop .topo-logo-mobile { display: none; }
+body.modo-desktop #btnAlternarModoTopo { display: inline-flex; align-items:center; justify-content:center; }
+body.modo-desktop .tabs { display: none; }
+body.modo-desktop .container { max-width: none; padding: 28px 36px calc(28px + env(safe-area-inset-bottom)); margin: 0; }
+body.modo-desktop #conteudo { max-width: 1180px; }
+body.modo-desktop .grid-desktop-2 { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; align-items: start; }
+body.modo-desktop .grid-desktop-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+body.modo-desktop .split-view { display: grid; grid-template-columns: 340px 1fr; gap: 0; border: 1px solid var(--cinza-linha); border-radius: 16px; overflow: hidden; background: var(--superficie); min-height: 60vh; }
+body.modo-desktop .split-lista { border-right: 1px solid var(--cinza-linha); overflow-y: auto; max-height: 78vh; padding: 14px; }
+body.modo-desktop .split-detalhe { padding: 22px; overflow-y: auto; max-height: 78vh; }
+body.modo-desktop .split-lista .card, body.modo-desktop .split-lista .lista-item { margin-bottom: 8px; }
+body.modo-desktop .split-lista .lista-item.selecionado { background: var(--azul-tinta); border-color: #bfdbfe; }
 .marca-dagua { text-align: center; font-size: 11px; color: var(--cinza-texto); margin-top: 20px; opacity: 0.6; }
 .marca-by { font-size: 0.85em; opacity: .8; }
 
@@ -283,15 +315,52 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
 </style>
 </head>
 <body>
+<div class="app-shell" id="appShell">
+  <nav class="sidebar-desktop" id="sidebarDesktop">
+    <div class="sidebar-marca">
+      <img src="icon-192.png" alt="Cosmos Clima" style="width:32px; height:32px; border-radius:9px;">
+      <div style="font-family:'Manrope',sans-serif; font-weight:800; font-size:14px; line-height:1.2;">Cosmos Clima<br><span style="font-weight:600; font-size:10.5px; color:var(--cinza-texto);">by Estelar</span></div>
+    </div>
+    <div class="tab sidebar-item ativa" data-tab="inicio">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>
+      <span>Início</span>
+    </div>
+    <div class="tab sidebar-item" data-tab="avulso">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/></svg>
+      <span>Orçamento</span>
+    </div>
+    <div class="tab sidebar-item" data-tab="contrato">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+      <span>Contrato</span>
+    </div>
+    <div class="tab sidebar-item" data-tab="clientes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span>Clientes</span>
+    </div>
+    <div class="tab sidebar-item" data-tab="agenda">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <span>Agenda</span>
+    </div>
+    <div class="tab sidebar-item" data-tab="config">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+      <span>Ajustes</span>
+    </div>
+    <div class="sidebar-rodape">
+      <button class="sidebar-toggle-modo" id="btnAlternarModoSidebar">📱 Usar versão mobile</button>
+    </div>
+  </nav>
+
+  <div class="desktop-main" id="desktopMain">
 <div class="container">
   <div class="topo">
     <div style="display:flex; align-items:center; gap:10px;">
-      <img src="icon-192.png" alt="Cosmos Clima" style="width:34px; height:34px; border-radius:9px; flex-shrink:0;">
+      <img src="icon-192.png" alt="Cosmos Clima" class="topo-logo-mobile" style="width:34px; height:34px; border-radius:9px; flex-shrink:0;">
       <div>
         <h2 id="nomeEmpresa" style="margin-bottom: 4px;">Carregando...</h2>
         <span class="badge-plano" id="badgePlano">...</span>
       </div>
     </div>
+    <button class="icon-btn" id="btnAlternarModoTopo" title="Trocar versão">🖥️</button>
   </div>
 
   <div class="tabs">
@@ -323,15 +392,19 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
 
   <div id="conteudo">
     <div class="card"><p id="statusCarregando">Carregando seus dados...</p></div>
+
   </div>
 
   <p class="marca-dagua">feito no Cosmos Clima <span class="marca-by">by Estelar</span></p>
+</div>
+  </div>
 </div>
 
 
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>
