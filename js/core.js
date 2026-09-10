@@ -93,6 +93,9 @@ let funcionarioNome = '';
 async function iniciar() {
   try {
     document.documentElement.setAttribute('data-tema', localStorage.getItem(TEMA_ESCURO_KEY) === '1' ? 'escuro' : 'claro');
+    aplicarModoVisual(decidirModoVisualInicial(), false);
+    document.getElementById('btnAlternarModoTopo')?.addEventListener('click', alternarModoVisual);
+    document.getElementById('btnAlternarModoSidebar')?.addEventListener('click', alternarModoVisual);
     const { data: { session }, error: erroSessao } = await supabaseClient.auth.getSession();
     if (erroSessao) throw erroSessao;
     if (!session) { window.location.href = "login.html"; return; }
@@ -691,6 +694,39 @@ function aplicarTema(escuro) {
   localStorage.setItem(TEMA_ESCURO_KEY, escuro ? '1' : '0');
 }
 
+const MODO_VISUAL_KEY = 'estelar_modo_visual'; // 'mobile' | 'desktop' — ausente = automático por tamanho de tela
+let modoVisualAtual = 'mobile';
+
+function decidirModoVisualInicial() {
+  const salvo = localStorage.getItem(MODO_VISUAL_KEY);
+  if (salvo === 'mobile' || salvo === 'desktop') return salvo;
+  return window.innerWidth >= 1024 ? 'desktop' : 'mobile';
+}
+
+function aplicarModoVisual(modo, manual) {
+  modoVisualAtual = modo;
+  document.body.classList.toggle('modo-desktop', modo === 'desktop');
+  if (manual) localStorage.setItem(MODO_VISUAL_KEY, modo);
+  const textoTopo = modo === 'desktop' ? '📱' : '🖥️';
+  const btnTopo = document.getElementById('btnAlternarModoTopo');
+  if (btnTopo) btnTopo.textContent = textoTopo;
+  const btnSidebar = document.getElementById('btnAlternarModoSidebar');
+  if (btnSidebar) btnSidebar.textContent = '📱 Usar versão mobile';
+}
+
+function alternarModoVisual() {
+  const novo = modoVisualAtual === 'desktop' ? 'mobile' : 'desktop';
+  aplicarModoVisual(novo, true);
+  const abaAtiva = document.querySelector('.tab.ativa');
+  mostrarAba(abaAtiva ? abaAtiva.dataset.tab : 'inicio');
+}
+
+window.addEventListener('resize', () => {
+  if (localStorage.getItem(MODO_VISUAL_KEY)) return; // usuário já escolheu manualmente — não mexe mais
+  const sugerido = window.innerWidth >= 1024 ? 'desktop' : 'mobile';
+  if (sugerido !== modoVisualAtual) { aplicarModoVisual(sugerido, false); if (empresaAtual) mostrarAba(document.querySelector('.tab.ativa')?.dataset.tab || 'inicio'); }
+});
+
 function osKanbanColuna(itens) {
   if (!itens.length) return '<p class="vazio" style="padding:10px 0;">Nada por aqui.</p>';
   return itens.map(o => `
@@ -781,7 +817,7 @@ async function renderInicio() {
   conteudo.innerHTML = '<div class="card"><p class="vazio">Carregando...</p></div>';
 
   const [{ data: osData }, { data: clientesData }, { data: agendaConcluida }] = await Promise.all([
-    supabaseClient.from('ordens_servico').select('id,status,valor,pago,data_pagamento,descricao,clientes(nome)').eq('empresa_id', empresaAtual.id).order('created_at', { ascending: false }),
+    supabaseClient.from('ordens_servico').select('id,status,valor,pago,data_pagamento,descricao,created_at,clientes(nome)').eq('empresa_id', empresaAtual.id).order('created_at', { ascending: false }),
     supabaseClient.from('clientes').select('id,nome,intervalo_retorno_dias').eq('empresa_id', empresaAtual.id),
     supabaseClient.from('agenda').select('cliente_id,data_hora').eq('empresa_id', empresaAtual.id).eq('status', 'concluido').order('data_hora', { ascending: false })
   ]);
@@ -840,6 +876,65 @@ async function renderInicio() {
       <div class="lista-item"><div class="info"><div class="titulo-item">Em execução</div><div class="sub-item">OS abertas ou em andamento</div></div><span style="font-weight:800; color:var(--cinza-texto); font-family:'Manrope',sans-serif;">${money(emExecucao)}</span></div>
     `;
 
+  const isDesktop = modoVisualAtual === 'desktop';
+  let dadosMeses = [], variacaoReceita = null, variacaoOS = null;
+  if (isDesktop) {
+    const mesmoMesInicio = (data, ref) => data.getMonth() === ref.getMonth() && data.getFullYear() === ref.getFullYear();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+      const criadasNoMes = os.filter(o => mesmoMesInicio(new Date(o.created_at), d));
+      const recebidoNoMes = os.filter(o => o.pago && o.data_pagamento && mesmoMesInicio(new Date(o.data_pagamento), d)).reduce((s, o) => s + (parseFloat(o.valor) || 0), 0);
+      dadosMeses.push({
+        label: d.toLocaleDateString('pt-BR', { month: 'short' }),
+        recebido: recebidoNoMes,
+        abertas: criadasNoMes.filter(o => o.status === 'aberta').length,
+        andamento: criadasNoMes.filter(o => o.status === 'em_andamento').length,
+        concluidas: criadasNoMes.filter(o => o.status === 'concluida').length,
+        total: criadasNoMes.length
+      });
+    }
+    const atual = dadosMeses[5], anterior = dadosMeses[4];
+    variacaoReceita = anterior.recebido > 0 ? Math.round(((atual.recebido - anterior.recebido) / anterior.recebido) * 100) : null;
+    variacaoOS = anterior.total > 0 ? Math.round(((atual.total - anterior.total) / anterior.total) * 100) : null;
+  }
+
+  function variacaoHtml(v) {
+    if (v === null) return '';
+    const cor = v >= 0 ? 'var(--sucesso)' : 'var(--erro)';
+    const seta = v >= 0 ? '↑' : '↓';
+    return `<span style="color:${cor}; font-weight:700; font-size:12px; margin-left:6px;">${seta} ${Math.abs(v)}% vs mês anterior</span>`;
+  }
+
+  const statsDesktopHtml = !isDesktop ? '' : `
+    <div class="grid-desktop-3" style="margin-bottom:16px;">
+      <div class="card" style="margin-bottom:0;">
+        <div class="sub-item" style="text-transform:uppercase; font-weight:700; font-size:11px;">Recebido este mês</div>
+        <div style="font-family:'Manrope',sans-serif; font-weight:800; font-size:26px; color:var(--sucesso); margin-top:4px;">${oculto ? '••••' : money(recebidoMes)}</div>
+        ${oculto ? '' : variacaoHtml(variacaoReceita)}
+      </div>
+      <div class="card" style="margin-bottom:0;">
+        <div class="sub-item" style="text-transform:uppercase; font-weight:700; font-size:11px;">A receber</div>
+        <div style="font-family:'Manrope',sans-serif; font-weight:800; font-size:26px; color:var(--ambar-escuro); margin-top:4px;">${oculto ? '••••' : money(aReceber)}</div>
+      </div>
+      <div class="card" style="margin-bottom:0;">
+        <div class="sub-item" style="text-transform:uppercase; font-weight:700; font-size:11px;">Ordens de serviço este mês</div>
+        <div style="font-family:'Manrope',sans-serif; font-weight:800; font-size:26px; color:var(--escuro); margin-top:4px;">${dadosMeses[5].total}</div>
+        ${variacaoHtml(variacaoOS)}
+      </div>
+    </div>
+  `;
+
+  const graficosDesktopHtml = !isDesktop ? '' : `
+    <div class="card">
+      <div class="card-titulo"><h3>Receita — últimos 6 meses</h3></div>
+      <canvas id="graficoReceitaDesktop" height="80"></canvas>
+    </div>
+    <div class="card">
+      <div class="card-titulo"><h3>Ordens de serviço por status — últimos 6 meses</h3></div>
+      <canvas id="graficoOsDesktop" height="80"></canvas>
+    </div>
+  `;
+
   conteudo.innerHTML = `
     <div class="saudacao">${saudacaoAtual()}, ${esc(empresaAtual.nome_empresa)}</div>
     <div class="saudacao-sub">${hoje.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}</div>
@@ -857,6 +952,9 @@ async function renderInicio() {
       </button>
     </div>
 
+    ${statsDesktopHtml}
+    ${isDesktop ? '<div class="grid-desktop-2">' : ''}
+    ${graficosDesktopHtml}
     <div class="card">
       <div class="card-titulo"><div class="card-icon-chip chip-azul"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONE_OS}</svg></div><h3>Ordens de serviço</h3></div>
       ${osStatusCardsHtml(osPorStatus)}
@@ -878,12 +976,15 @@ async function renderInicio() {
       </div>
       <div id="financeiroConteudo">${financeiroConteudo}</div>
     </div>
+    ${isDesktop ? '</div>' : ''}
 
     <div class="card">
       <div class="card-titulo"><div class="card-icon-chip chip-ambar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONE_CALENDARIO_CHECK}</svg></div><h3>Clientes — visitas vencidas ou próximas</h3></div>
       ${visitasHtml}
     </div>
   `;
+
+  if (isDesktop) inicializarGraficosDesktop(dadosMeses);
 
   document.getElementById('btnOcultarFinanceiro').addEventListener('click', () => {
     const novoEstado = localStorage.getItem(FINANCEIRO_OCULTO_KEY) === '1' ? '0' : '1';
@@ -901,6 +1002,54 @@ async function renderInicio() {
   document.getElementById('btnIniciarTrial')?.addEventListener('click', iniciarTrialCompleto);
   document.getElementById('btnDispensarTrial')?.addEventListener('click', dispensarTrialBanner);
   document.getElementById('btnVerPlanosTrial')?.addEventListener('click', () => mostrarAba('config'));
+}
+
+let _graficoReceitaChart = null, _graficoOsChart = null;
+
+function inicializarGraficosDesktop(dadosMeses) {
+  if (!window.Chart) return;
+  const elReceita = document.getElementById('graficoReceitaDesktop');
+  const elOs = document.getElementById('graficoOsDesktop');
+  if (!elReceita || !elOs) return;
+
+  if (_graficoReceitaChart) _graficoReceitaChart.destroy();
+  if (_graficoOsChart) _graficoOsChart.destroy();
+
+  _graficoReceitaChart = new Chart(elReceita, {
+    type: 'line',
+    data: {
+      labels: dadosMeses.map(m => m.label),
+      datasets: [{
+        label: 'Recebido',
+        data: dadosMeses.map(m => m.recebido),
+        borderColor: '#2563eb',
+        backgroundColor: 'rgba(37,99,235,.08)',
+        fill: true, tension: .35, pointRadius: 3, pointBackgroundColor: '#2563eb'
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: { y: { ticks: { callback: (v) => 'R$ ' + v } } }
+    }
+  });
+
+  _graficoOsChart = new Chart(elOs, {
+    type: 'bar',
+    data: {
+      labels: dadosMeses.map(m => m.label),
+      datasets: [
+        { label: 'Aberta', data: dadosMeses.map(m => m.abertas), backgroundColor: '#2563eb' },
+        { label: 'Em andamento', data: dadosMeses.map(m => m.andamento), backgroundColor: '#f59e0b' },
+        { label: 'Concluída', data: dadosMeses.map(m => m.concluidas), backgroundColor: '#16a34a' }
+      ]
+    },
+    options: {
+      responsive: true,
+      scales: { x: { stacked: true }, y: { stacked: true, ticks: { stepSize: 1 } } },
+      plugins: { legend: { position: 'bottom' } }
+    }
+  });
 }
 
 const FINANCEIRO_FILTROS = [
@@ -1092,6 +1241,7 @@ let clientesCache = [];
 
 async function renderClientes() {
   const conteudo = document.getElementById("conteudo");
+  const desktop = modoVisualAtual === 'desktop';
   conteudo.innerHTML = `
     <div id="clAvisoLimite"></div>
     <button class="btn" id="clAbrirFormBtn">+ Novo cliente</button>
@@ -1114,11 +1264,23 @@ async function renderClientes() {
       <div class="msg" id="clMsg"></div>
       <button class="btn" id="clSalvarBtn">Salvar cliente</button>
     </div>
+    ${desktop ? `
+    <div class="split-view">
+      <div class="split-lista">
+        <input type="text" id="clBusca" placeholder="Buscar por nome, telefone ou e-mail...">
+        <div id="clLista" style="margin-top:12px;"><p class="vazio">Carregando...</p></div>
+      </div>
+      <div class="split-detalhe" id="clDetalhePainel">
+        <p class="vazio">Selecione um cliente à esquerda pra ver os detalhes.</p>
+      </div>
+    </div>
+    ` : `
     <div class="card">
       <h3>Clientes cadastrados</h3>
       <input type="text" id="clBusca" placeholder="Buscar por nome, telefone ou e-mail...">
       <div id="clLista" style="margin-top:12px;"><p class="vazio">Carregando...</p></div>
     </div>
+    `}
   `;
   document.getElementById("clAbrirFormBtn").addEventListener("click", () => {
     document.getElementById("clFormCard").classList.remove("hidden");
@@ -1214,8 +1376,12 @@ function clRenderLista(termo) {
 async function clVerDetalhes(id) {
   const cliente = clientesCache.find(c => c.id === id);
   if (!cliente) return;
-  const conteudo = document.getElementById("conteudo");
+  const painelLateral = modoVisualAtual === 'desktop' && document.getElementById('clDetalhePainel');
+  const conteudo = painelLateral || document.getElementById("conteudo");
   conteudo.innerHTML = `<div class="card"><p class="vazio">Carregando...</p></div>`;
+  if (painelLateral) {
+    document.querySelectorAll('#clLista [data-ver-cliente]').forEach(el => el.classList.toggle('selecionado', el.getAttribute('data-ver-cliente') === id));
+  }
 
   const [{ data: orcamentos }, { data: agendaItens }, { data: osItens }, { data: contratosItens }] = await Promise.all([
     supabaseClient.from('orcamentos').select('*').eq('cliente_id', id).order('created_at', { ascending: false }),
@@ -1313,7 +1479,7 @@ async function clVerDetalhes(id) {
       <h3>Agenda</h3>
       ${agendaHtml}
     </div>
-    <div class="voltar-link" id="clVoltarBtn">← Voltar para a lista de clientes</div>
+    <div class="voltar-link ${painelLateral ? 'hidden' : ''}" id="clVoltarBtn">← Voltar para a lista de clientes</div>
   `;
   document.getElementById('clVoltarBtn').addEventListener('click', renderClientes);
   document.getElementById('clEditarBtn').addEventListener('click', () => clMostrarEdicao(cliente));
