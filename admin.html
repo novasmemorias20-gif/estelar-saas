@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Cosmos Clima</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --azul: #2563eb; --azul-escuro: #1d4ed8; --ciano: #06b6d4;
+  --gradiente: linear-gradient(135deg, var(--azul), var(--ciano));
+  --azul-tinta: #eff6ff; --escuro: #0f172a; --cinza-texto: #64748b;
+  --cinza-linha: #e2e8f0; --cinza-claro: #f8fafc; --superficie: #ffffff;
+  --ambar: #f59e0b; --ambar-tinta: #fef3c7; --ambar-escuro: #b45309;
+  --sucesso: #16a34a; --sucesso-bg: #dcfce7; --erro: #ef4444; --erro-bg: #fee2e2;
+  --sombra: 0 1px 2px rgba(15,23,42,.05), 0 10px 24px rgba(15,23,42,.07);
+}
+* { box-sizing: border-box; }
+body { margin:0; font-family:"Inter",sans-serif; background:var(--cinza-claro); color:var(--escuro); }
+h1,h2,h3 { font-family:"Manrope",sans-serif; font-weight:800; margin:0; }
+.hidden { display:none !important; }
+input, select { width:100%; padding:10px 12px; border:1.5px solid var(--cinza-linha); border-radius:10px; font-size:14px; font-family:inherit; margin-bottom:10px; }
+label { display:block; font-size:12.5px; font-weight:600; color:var(--cinza-texto); margin-bottom:4px; }
+.btn { background:var(--gradiente); color:#fff; border:none; padding:11px 18px; border-radius:10px; font-weight:700; font-size:13.5px; cursor:pointer; }
+.btn-secundario { background:#fff; border:1.5px solid var(--cinza-linha); color:var(--escuro); }
+.card { background:var(--superficie); border:1px solid var(--cinza-linha); border-radius:16px; padding:20px; box-shadow:var(--sombra); }
+.msg { font-size:13px; margin-top:8px; }
+.msg.erro { color:var(--erro); }
+.msg.ok { color:var(--sucesso); }
+
+#telaLogin { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+#telaLogin .card { max-width:360px; width:100%; }
+
+#telaAdmin { max-width:1100px; margin:0 auto; padding:28px 20px; }
+.topo-admin { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }
+table { width:100%; border-collapse:collapse; font-size:13.5px; }
+th, td { text-align:left; padding:10px 8px; border-bottom:1px solid var(--cinza-linha); }
+th { font-size:11px; text-transform:uppercase; color:var(--cinza-texto); }
+tr.linha-empresa { cursor:pointer; }
+tr.linha-empresa:hover { background:var(--azul-tinta); }
+.tag { font-size:10.5px; font-weight:800; text-transform:uppercase; padding:3px 9px; border-radius:999px; }
+.tag-ativa { background:var(--sucesso-bg); color:var(--sucesso); }
+.tag-pendente { background:var(--ambar-tinta); color:var(--ambar-escuro); }
+.tag-atrasada, .tag-cancelada { background:var(--erro-bg); color:var(--erro); }
+.tag-gratis { background:var(--cinza-linha); color:var(--cinza-texto); }
+
+#overlayDetalhe { position:fixed; inset:0; background:rgba(15,23,42,.4); display:flex; justify-content:flex-end; z-index:100; }
+#painelDetalhe { background:#fff; width:100%; max-width:420px; height:100%; overflow-y:auto; padding:24px; }
+.stat-mini { display:flex; gap:12px; margin:14px 0; }
+.stat-mini div { flex:1; background:var(--cinza-claro); border-radius:10px; padding:12px; text-align:center; }
+.stat-mini b { display:block; font-size:20px; font-family:"Manrope",sans-serif; }
+.checkbox-row { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+.checkbox-row input { width:auto; margin:0; }
+</style>
+</head>
+<body>
+
+<div id="telaLogin">
+  <div class="card">
+    <h2 style="margin-bottom:6px;">Admin — Cosmos Clima</h2>
+    <p style="font-size:13px; color:var(--cinza-texto); margin-bottom:18px;">Acesso restrito. Entre com sua conta de administrador.</p>
+    <label>E-mail</label>
+    <input type="email" id="loginEmail" placeholder="voce@estelar.com">
+    <label>Senha</label>
+    <input type="password" id="loginSenha" placeholder="Sua senha">
+    <button class="btn" id="btnLogin" style="width:100%;">Entrar</button>
+    <div class="msg" id="msgLogin"></div>
+  </div>
+</div>
+
+<div id="telaAdmin" class="hidden">
+  <div class="topo-admin">
+    <h1 style="font-size:22px;">Empresas cadastradas</h1>
+    <button class="btn-secundario btn" id="btnSair">Sair</button>
+  </div>
+  <input type="text" id="buscaEmpresa" placeholder="Buscar por nome da empresa ou e-mail...">
+  <div class="card" style="padding:0; overflow-x:auto;">
+    <table>
+      <thead>
+        <tr><th>Empresa</th><th>E-mail de login</th><th>Plano</th><th>Status</th><th>Cadastrada em</th></tr>
+      </thead>
+      <tbody id="corpoTabela">
+        <tr><td colspan="5" style="text-align:center; padding:30px; color:var(--cinza-texto);">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div id="overlayDetalhe" class="hidden">
+  <div id="painelDetalhe">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+      <h2 style="font-size:18px;" id="detalheNome">...</h2>
+      <button class="btn-secundario btn" id="btnFecharDetalhe" style="padding:6px 10px;">✕</button>
+    </div>
+    <p style="font-size:13px; color:var(--cinza-texto); margin-top:-10px;" id="detalheEmail">...</p>
+
+    <div class="stat-mini">
+      <div><b id="detalheClientes">-</b>Clientes</div>
+      <div><b id="detalheOS">-</b>Ordens de Serviço</div>
+      <div><b id="detalheFuncionarios">-</b>Ajudantes</div>
+    </div>
+
+    <div style="border-top:1px solid var(--cinza-linha); margin:16px 0;"></div>
+
+    <label>Nome da empresa</label>
+    <input type="text" id="editNome">
+
+    <label>Plano</label>
+    <select id="editPlano">
+      <option value="gratis">Grátis</option>
+      <option value="basico">Básico</option>
+      <option value="completo">Completo</option>
+    </select>
+
+    <label>Status da assinatura</label>
+    <select id="editStatus">
+      <option value="pendente">Pendente</option>
+      <option value="ativa">Ativa</option>
+      <option value="atrasada">Atrasada</option>
+      <option value="cancelada">Cancelada</option>
+    </select>
+
+    <div class="checkbox-row">
+      <input type="checkbox" id="editCortesia">
+      <label style="margin:0;">Conta cortesia (acesso Completo vitalício, sem cobrar)</label>
+    </div>
+
+    <div id="infoTrial" style="font-size:12.5px; color:var(--cinza-texto); margin-bottom:10px;"></div>
+    <button class="btn-secundario btn" id="btnConcederTrial" style="width:100%; margin-bottom:14px;">Conceder mais 14 dias de teste do Completo</button>
+
+    <button class="btn" id="btnSalvarEmpresa" style="width:100%;">Salvar alterações</button>
+    <div class="msg" id="msgDetalhe"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = "https://lkankciqsldutuncuvyl.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_QAzF6HlUkYoAumTQCzKuVg_FEmhtwQ8"; // mesma chave pública usada em login.html/painel.html
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let empresaSelecionadaId = null;
+let empresasCache = [];
+
+async function iniciarAdmin() {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) return;
+  const { data: admin } = await supabaseClient.from('admins').select('user_id').eq('user_id', session.user.id).maybeSingle();
+  if (!admin) {
+    document.getElementById('msgLogin').className = 'msg erro';
+    document.getElementById('msgLogin').textContent = 'Essa conta não tem acesso de administrador.';
+    await supabaseClient.auth.signOut();
+    return;
+  }
+  document.getElementById('telaLogin').classList.add('hidden');
+  document.getElementById('telaAdmin').classList.remove('hidden');
+  carregarEmpresas();
+}
+
+document.getElementById('btnLogin').addEventListener('click', async () => {
+  const msg = document.getElementById('msgLogin');
+  const email = document.getElementById('loginEmail').value.trim();
+  const senha = document.getElementById('loginSenha').value;
+  msg.className = 'msg'; msg.textContent = 'Entrando...';
+  const { error } = await supabaseClient.auth.signInWithPassword({ email, password: senha });
+  if (error) { msg.className = 'msg erro'; msg.textContent = 'E-mail ou senha incorretos.'; return; }
+  msg.textContent = '';
+  iniciarAdmin();
+});
+
+document.getElementById('btnSair').addEventListener('click', async () => {
+  await supabaseClient.auth.signOut();
+  window.location.reload();
+});
+
+async function chamarAdminFn(body) {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  const resp = await fetch(`${SUPABASE_URL}/functions/v1/admin-empresas`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+    body: JSON.stringify(body)
+  });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.error || 'Erro desconhecido');
+  return data;
+}
+
+function esc(str) {
+  return String(str ?? '').replace(/[&<>"']/g, s => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[s]));
+}
+
+const STATUS_LABEL = { ativa: 'Ativa', pendente: 'Pendente', atrasada: 'Atrasada', cancelada: 'Cancelada' };
+
+async function carregarEmpresas(termo) {
+  const corpo = document.getElementById('corpoTabela');
+  try {
+    const { empresas } = await chamarAdminFn({ acao: termo ? 'buscar' : 'listar', termo });
+    empresasCache = empresas;
+    if (!empresas.length) { corpo.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--cinza-texto);">Nenhuma empresa encontrada.</td></tr>'; return; }
+    corpo.innerHTML = empresas.map(e => {
+      const tagClasse = e.cortesia ? 'tag-ativa' : (e.plano === 'gratis' ? 'tag-gratis' : `tag-${e.assinatura_status || 'pendente'}`);
+      const statusTexto = e.cortesia ? 'Cortesia' : (e.plano === 'gratis' ? '—' : (STATUS_LABEL[e.assinatura_status] || e.assinatura_status));
+      const nomePlano = { gratis: 'Grátis', basico: 'Básico', completo: 'Completo' }[e.plano] || e.plano;
+      return `
+        <tr class="linha-empresa" data-id="${e.id}">
+          <td><b>${esc(e.nome_empresa)}</b></td>
+          <td>${esc(e.email || '-')}</td>
+          <td>${nomePlano}</td>
+          <td><span class="tag ${tagClasse}">${statusTexto}</span></td>
+          <td>${e.created_at ? new Date(e.created_at).toLocaleDateString('pt-BR') : '-'}</td>
+        </tr>
+      `;
+    }).join('');
+    document.querySelectorAll('.linha-empresa').forEach(tr => {
+      tr.addEventListener('click', () => abrirDetalhe(tr.dataset.id));
+    });
+  } catch (e) {
+    corpo.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--erro);">Erro: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+let debounceBusca;
+document.getElementById('buscaEmpresa').addEventListener('input', (e) => {
+  clearTimeout(debounceBusca);
+  debounceBusca = setTimeout(() => carregarEmpresas(e.target.value.trim()), 350);
+});
+
+async function abrirDetalhe(id) {
+  empresaSelecionadaId = id;
+  document.getElementById('overlayDetalhe').classList.remove('hidden');
+  document.getElementById('msgDetalhe').textContent = '';
+  try {
+    const { empresa, totalClientes, totalOS, funcionarios } = await chamarAdminFn({ acao: 'detalhe', empresaId: id });
+    document.getElementById('detalheNome').textContent = empresa.nome_empresa;
+    document.getElementById('detalheEmail').textContent = empresa.email || '(e-mail não encontrado)';
+    document.getElementById('detalheClientes').textContent = totalClientes;
+    document.getElementById('detalheOS').textContent = totalOS;
+    document.getElementById('detalheFuncionarios').textContent = funcionarios.filter(f => f.ativo).length;
+    document.getElementById('editNome').value = empresa.nome_empresa || '';
+    document.getElementById('editPlano').value = empresa.plano || 'gratis';
+    document.getElementById('editStatus').value = empresa.assinatura_status || 'pendente';
+    document.getElementById('editCortesia').checked = !!empresa.cortesia;
+    const trialInfo = document.getElementById('infoTrial');
+    if (empresa.trial_completo_expira_em && new Date(empresa.trial_completo_expira_em) > new Date()) {
+      const dias = Math.ceil((new Date(empresa.trial_completo_expira_em) - new Date()) / 86400000);
+      trialInfo.textContent = `Teste do Completo ativo — termina em ${dias} dia(s).`;
+    } else {
+      trialInfo.textContent = empresa.trial_completo_usado ? 'Já usou o teste do Completo antes.' : 'Nunca usou o teste do Completo.';
+    }
+  } catch (e) {
+    document.getElementById('msgDetalhe').className = 'msg erro';
+    document.getElementById('msgDetalhe').textContent = 'Erro ao carregar: ' + e.message;
+  }
+}
+
+document.getElementById('btnFecharDetalhe').addEventListener('click', () => {
+  document.getElementById('overlayDetalhe').classList.add('hidden');
+});
+
+document.getElementById('btnSalvarEmpresa').addEventListener('click', async () => {
+  const msg = document.getElementById('msgDetalhe');
+  msg.className = 'msg'; msg.textContent = 'Salvando...';
+  try {
+    await chamarAdminFn({
+      acao: 'atualizar',
+      empresaId: empresaSelecionadaId,
+      mudancas: {
+        nome_empresa: document.getElementById('editNome').value.trim(),
+        plano: document.getElementById('editPlano').value,
+        assinatura_status: document.getElementById('editStatus').value,
+        cortesia: document.getElementById('editCortesia').checked
+      }
+    });
+    msg.className = 'msg ok'; msg.textContent = 'Salvo!';
+    carregarEmpresas();
+  } catch (e) {
+    msg.className = 'msg erro'; msg.textContent = 'Erro: ' + e.message;
+  }
+});
+
+document.getElementById('btnConcederTrial').addEventListener('click', async () => {
+  const msg = document.getElementById('msgDetalhe');
+  msg.className = 'msg'; msg.textContent = 'Aplicando...';
+  const expira = new Date(Date.now() + 14 * 86400000).toISOString();
+  try {
+    await chamarAdminFn({ acao: 'atualizar', empresaId: empresaSelecionadaId, mudancas: { trial_completo_expira_em: expira, trial_completo_usado: true } });
+    msg.className = 'msg ok'; msg.textContent = 'Teste de 14 dias concedido!';
+    abrirDetalhe(empresaSelecionadaId);
+  } catch (e) {
+    msg.className = 'msg erro'; msg.textContent = 'Erro: ' + e.message;
+  }
+});
+
+iniciarAdmin();
+</script>
+</body>
+</html>
