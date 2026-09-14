@@ -132,6 +132,10 @@ tr.linha-empresa:hover { background:var(--azul-tinta); }
 
     <button class="btn" id="btnSalvarEmpresa" style="width:100%;">Salvar alterações</button>
     <div class="msg" id="msgDetalhe"></div>
+
+    <div style="border-top:1px solid var(--cinza-linha); margin:20px 0 14px;"></div>
+    <p style="font-size:12px; color:var(--cinza-texto); margin-bottom:8px;">Isso apaga clientes, orçamentos, OS, contratos, agenda e o login dessa empresa (e de ajudantes vinculados). Não tem como desfazer.</p>
+    <button class="btn" id="btnExcluirEmpresa" style="width:100%; background:var(--erro);">Excluir esta empresa</button>
   </div>
 </div>
 
@@ -142,6 +146,8 @@ const SUPABASE_ANON_KEY = "sb_publishable_QAzF6HlUkYoAumTQCzKuVg_FEmhtwQ8"; // m
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let empresaSelecionadaId = null;
+let empresaSelecionadaNome = null;
+let empresaSelecionadaAtiva = false;
 let empresasCache = [];
 
 async function iniciarAdmin() {
@@ -234,6 +240,8 @@ async function abrirDetalhe(id) {
   try {
     const { empresa, totalClientes, totalOS, funcionarios } = await chamarAdminFn({ acao: 'detalhe', empresaId: id });
     document.getElementById('detalheNome').textContent = empresa.nome_empresa;
+    empresaSelecionadaNome = empresa.nome_empresa;
+    empresaSelecionadaAtiva = !!(empresa.cortesia || (empresa.plano !== 'gratis' && empresa.assinatura_status === 'ativa'));
     document.getElementById('detalheEmail').textContent = empresa.email || '(e-mail não encontrado)';
     document.getElementById('detalheClientes').textContent = totalClientes;
     document.getElementById('detalheOS').textContent = totalOS;
@@ -288,6 +296,25 @@ document.getElementById('btnConcederTrial').addEventListener('click', async () =
     await chamarAdminFn({ acao: 'atualizar', empresaId: empresaSelecionadaId, mudancas: { trial_completo_expira_em: expira, trial_completo_usado: true } });
     msg.className = 'msg ok'; msg.textContent = 'Teste de 14 dias concedido!';
     abrirDetalhe(empresaSelecionadaId);
+  } catch (e) {
+    msg.className = 'msg erro'; msg.textContent = 'Erro: ' + e.message;
+  }
+});
+
+document.getElementById('btnExcluirEmpresa').addEventListener('click', async () => {
+  const msg = document.getElementById('msgDetalhe');
+  const digitado = prompt(`${empresaSelecionadaAtiva ? '⚠️ ATENÇÃO: essa empresa parece ser uma assinante ativa/cortesia, não uma conta de teste!\n\n' : ''}Isso vai apagar "${empresaSelecionadaNome}" e todos os dados dela (clientes, OS, orçamentos, contratos, agenda) e os logins de acesso — sem volta.\n\nPra confirmar, digite o nome exato da empresa:`);
+  if (digitado === null) return;
+  if (digitado.trim() !== empresaSelecionadaNome) {
+    msg.className = 'msg erro'; msg.textContent = 'Nome digitado não bateu — nada foi excluído.';
+    return;
+  }
+  msg.className = 'msg'; msg.textContent = 'Excluindo...';
+  try {
+    await chamarAdminFn({ acao: 'excluir', empresaId: empresaSelecionadaId });
+    msg.className = 'msg ok'; msg.textContent = 'Empresa excluída.';
+    document.getElementById('overlayDetalhe').classList.add('hidden');
+    carregarEmpresas();
   } catch (e) {
     msg.className = 'msg erro'; msg.textContent = 'Erro: ' + e.message;
   }
