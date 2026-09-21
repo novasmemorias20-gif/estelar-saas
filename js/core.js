@@ -2810,22 +2810,24 @@ function avRenderItems() {
     div.className = 'item-card';
     div.innerHTML =
       `<div class="item-header"><span>Item ${idx + 1} — ${avTipoLabel(it.tipo)}</span><button class="remove-btn" data-remove="${it.id}">✕</button></div>` +
-      `<label>Tipo de serviço</label><select data-field="tipo" data-id="${it.id}">
+      `<div class="grid3">` +
+      `<div class="field"><label>Tipo de serviço</label><select data-field="tipo" data-id="${it.id}">
         <option value="instalacao" ${it.tipo === 'instalacao' ? 'selected' : ''}>Instalação</option>
         <option value="manutencao" ${it.tipo === 'manutencao' ? 'selected' : ''}>Manutenção</option>
         <option value="higienizacao" ${it.tipo === 'higienizacao' ? 'selected' : ''}>Higienização</option>
-      </select>` +
-      `<label>Porte do aparelho (BTUs)</label><select data-field="porte" data-id="${it.id}">` +
+      </select></div>` +
+      `<div class="field"><label>Porte do aparelho (BTUs)</label><select data-field="porte" data-id="${it.id}">` +
         ['9000','12000','18000','24000','30000','36000'].map(v => {
           const lbl = v === '36000' ? '36.000+' : (parseInt(v)/1000) + '.000';
           return `<option value="${v}" ${it.porte === v ? 'selected' : ''}>${lbl}</option>`;
         }).join('') +
-      `</select>` +
-      `<label>Dificuldade de acesso</label><select data-field="dificuldade" data-id="${it.id}">
+      `</select></div>` +
+      `<div class="field"><label>Dificuldade de acesso</label><select data-field="dificuldade" data-id="${it.id}">
         <option value="facil" ${it.dificuldade === 'facil' ? 'selected' : ''}>Fácil — térreo / fácil acesso</option>
         <option value="medio" ${it.dificuldade === 'medio' ? 'selected' : ''}>Médio</option>
         <option value="dificil" ${it.dificuldade === 'dificil' ? 'selected' : ''}>Difícil — altura / acesso complicado</option>
-      </select>` +
+      </select></div>` +
+      `</div>` +
       (it.tipo === 'instalacao' ?
         `<label>Distância entre unidades — metros de infra</label>
         <input type="number" min="0" step="0.5" data-field="metros" data-id="${it.id}" value="${it.metros}">
@@ -3179,17 +3181,19 @@ function renderContrato() {
     <div id="ctEditor">
       <div class="card">
         <h3>Cliente</h3>
-        <label>Cliente cadastrado</label>
-        <select id="ctClienteSelect"><option value="">— selecionar cliente —</option></select>
-        <label>Tipo de local</label>
-        <select id="ctClienteTipo">
-          <option>Empresa / Escritório</option><option>Hotel / Pousada</option><option>Mercado / Varejo</option>
-          <option>Clínica / Consultório</option><option>Indústria</option><option>Condomínio</option><option>Outro</option>
-        </select>
-        <label>CNPJ / CPF</label><input type="text" id="ctClienteCnpj" placeholder="00.000.000/0000-00">
-        <label>Nome do responsável</label><input type="text" id="ctClienteResponsavel" placeholder="Quem está fechando o contrato">
-        <label>Contato (WhatsApp)</label><input type="text" id="ctClienteContato" placeholder="(18) 9....">
-        <label>Endereço / Cidade</label><input type="text" id="ctClienteEndereco" placeholder="Bairro, cidade">
+        <div class="field"><label>Cliente cadastrado</label>
+        <select id="ctClienteSelect"><option value="">— selecionar cliente —</option></select></div>
+        <div class="grid2">
+          <div class="field"><label>Tipo de local</label>
+          <select id="ctClienteTipo">
+            <option>Empresa / Escritório</option><option>Hotel / Pousada</option><option>Mercado / Varejo</option>
+            <option>Clínica / Consultório</option><option>Indústria</option><option>Condomínio</option><option>Outro</option>
+          </select></div>
+          <div class="field"><label>CNPJ / CPF</label><input type="text" id="ctClienteCnpj" placeholder="00.000.000/0000-00"></div>
+          <div class="field"><label>Nome do responsável</label><input type="text" id="ctClienteResponsavel" placeholder="Quem está fechando o contrato"></div>
+          <div class="field"><label>Contato (WhatsApp)</label><input type="text" id="ctClienteContato" placeholder="(18) 9...."></div>
+          <div class="field"><label>Endereço / Cidade</label><input type="text" id="ctClienteEndereco" placeholder="Bairro, cidade"></div>
+        </div>
       </div>
 
       <div class="card">
@@ -3201,14 +3205,16 @@ function renderContrato() {
 
       <div class="card">
         <h3>Deslocamento e frequência</h3>
-        <label>Distância até o local (km, ida)</label>
-        <input type="number" id="ctDistanciaKm" value="0" min="0">
-        <label>Visitas por ano</label>
-        <select id="ctFreqPreset">
-          <option value="12">Mensal (12x/ano)</option><option value="4">Trimestral (4x/ano)</option>
-          <option value="2">Semestral (2x/ano)</option><option value="1">Anual (1x/ano)</option>
-          <option value="custom">Personalizado</option>
-        </select>
+        <div class="grid2">
+          <div class="field"><label>Distância até o local (km, ida)</label>
+          <input type="number" id="ctDistanciaKm" value="0" min="0"></div>
+          <div class="field"><label>Visitas por ano</label>
+          <select id="ctFreqPreset">
+            <option value="12">Mensal (12x/ano)</option><option value="4">Trimestral (4x/ano)</option>
+            <option value="2">Semestral (2x/ano)</option><option value="1">Anual (1x/ano)</option>
+            <option value="custom">Personalizado</option>
+          </select></div>
+        </div>
         <div class="field hidden" id="ctFreqCustomWrap">
           <label>Número de visitas por ano (personalizado)</label>
           <input type="number" id="ctFreqCustom" value="6" min="1">
@@ -3316,10 +3322,12 @@ function ctRenderEquip() {
       return `
         <div class="item-card">
           <div class="item-header"><span>Item ${i + 1} — Condensadora (${ehMultiplo ? 'multi/VRF' : ''})</span><button class="remove-btn" data-remove-equip="${e.id}">✕</button></div>
-          <label>Tipo</label>${seletorTipo}
-          <label>Acesso</label>${seletorAcesso}
-          <label>Condição</label>${seletorCondicao}
-          <label>Evaporadoras nesta condensadora</label>
+          <div class="grid3">
+            <div class="field"><label>Tipo</label>${seletorTipo}</div>
+            <div class="field"><label>Acesso</label>${seletorAcesso}</div>
+            <div class="field"><label>Condição</label>${seletorCondicao}</div>
+          </div>
+          <label style="margin-top:10px;">Evaporadoras nesta condensadora</label>
           ${evapsHtml}
           <button class="add-btn" style="margin-top:10px; padding:9px;" data-add-evap="${e.id}">+ Evaporadora</button>
         </div>`;
@@ -3327,11 +3335,13 @@ function ctRenderEquip() {
     return `
       <div class="item-card">
         <div class="item-header"><span>Item ${i + 1} — ${CT_TIPOS.find(t => t.id === e.tipo).label}</span><button class="remove-btn" data-remove-equip="${e.id}">✕</button></div>
-        <label>Tipo</label>${seletorTipo}
-        <label>Porte</label><select data-eq="${e.id}" data-campo="porte">${CT_PORTES.map(p => `<option ${e.porte === p ? 'selected' : ''}>${p}</option>`).join('')}</select>
-        <label>Quantidade</label><input type="number" min="1" value="${e.qtd}" data-eq="${e.id}" data-campo="qtd">
-        <label>Acesso</label>${seletorAcesso}
-        <label>Condição</label>${seletorCondicao}
+        <div class="grid3">
+          <div class="field"><label>Tipo</label>${seletorTipo}</div>
+          <div class="field"><label>Porte</label><select data-eq="${e.id}" data-campo="porte">${CT_PORTES.map(p => `<option ${e.porte === p ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
+          <div class="field"><label>Quantidade</label><input type="number" min="1" value="${e.qtd}" data-eq="${e.id}" data-campo="qtd"></div>
+          <div class="field"><label>Acesso</label>${seletorAcesso}</div>
+          <div class="field"><label>Condição</label>${seletorCondicao}</div>
+        </div>
       </div>`;
   }).join('');
   ctCalcular();
