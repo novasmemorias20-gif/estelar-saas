@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/icon-192.png">
-<meta name="theme-color" content="#2563eb">
+<meta name="theme-color" content="#0A2540">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>Painel</title>
@@ -16,14 +16,14 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root {
-  --azul: #2563eb;
-  --azul-escuro: #1d4ed8;
-  --azul-tinta: #eff6ff;
-  --ciano: #06b6d4;
-  --gradiente: linear-gradient(135deg, var(--azul), var(--ciano));
-  --ambar: #f59e0b;
-  --ambar-escuro: #b45309;
-  --ambar-tinta: #fef3c7;
+  --azul: #0B5FA5;
+  --azul-escuro: #0A2540;
+  --azul-tinta: #eaf2fa;
+  --ciano: #2E86D8;
+  --gradiente: linear-gradient(135deg, var(--azul-escuro), var(--ciano));
+  --ambar: #F2734A;
+  --ambar-escuro: #C2410C;
+  --ambar-tinta: #FFEAE0;
   --escuro: #0f172a;
   --cinza-texto: #64748b;
   --cinza-linha: #e2e8f0;
@@ -53,7 +53,7 @@ html[data-tema="escuro"] input, html[data-tema="escuro"] select {
   background: var(--superficie);
   color: var(--escuro);
 }
-html[data-tema="escuro"] .cal-tem { background: #1e3a5f; }
+html[data-tema="escuro"] .cal-tem { background: #12324f; }
 html[data-tema="escuro"] .add-btn { background: #2d2410; }
 html[data-tema="escuro"] .add-btn:hover { background: #3a2f14; }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -68,6 +68,15 @@ body {
 h1, h2, h3 { font-family: "Manrope", "Inter", sans-serif; letter-spacing: -0.01em; }
 .container { max-width: 480px; margin: 0 auto; padding: 20px 16px calc(96px + env(safe-area-inset-bottom)); }
 @media (min-width: 700px) { .container { max-width: 620px; } }
+@media (min-width: 900px) { .container { max-width: 760px; } }
+@media (max-width: 360px) {
+  .container { padding: 16px 12px calc(92px + env(safe-area-inset-bottom)); }
+  .card { padding: 15px; }
+  .price-grid { grid-template-columns: 1fr; }
+  .price-grid span { margin-top: 4px; }
+  .item-header { flex-wrap: wrap; gap: 6px; }
+  .action-row { flex-direction: column; }
+}
 .card { background: var(--superficie); border: 1px solid var(--cinza-linha); border-radius: 16px; padding: 20px; margin-bottom: 14px; box-shadow: var(--sombra); }
 h2, h3 { color: var(--escuro); margin-top: 0; }
 h2 { font-weight: 800; }
@@ -83,16 +92,16 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 textarea { resize: vertical; min-height: 44px; }
 .btn {
   display: inline-block; width: 100%; padding: 13px 16px; border-radius: 12px; border: none;
-  background: var(--gradiente); color: #fff; font-size: 15px; font-weight: 700;
+  background: var(--ambar); color: #fff; font-size: 15px; font-weight: 700;
   cursor: pointer; margin-top: 16px; text-align: center; text-decoration: none;
-  box-shadow: 0 4px 14px rgba(37,99,235,.28); transition: transform .1s, box-shadow .15s;
+  box-shadow: 0 4px 14px rgba(242,115,74,.32); transition: transform .1s, box-shadow .15s;
 }
-.btn:hover { box-shadow: 0 6px 18px rgba(37,99,235,.36); }
+.btn:hover { filter: brightness(1.04); box-shadow: 0 6px 18px rgba(242,115,74,.4); }
 .btn:active { transform: scale(.98); }
 .btn-secundario { background: var(--superficie); color: var(--azul); border: 1.5px solid var(--cinza-linha); box-shadow: none; }
 .btn-secundario:hover { background: var(--azul-tinta); border-color: var(--azul); box-shadow: none; }
-.btn-ambar { background: var(--ambar); color: #1a1200; box-shadow: 0 4px 14px rgba(245,158,11,.3); }
-.btn-ambar:hover { filter: brightness(1.03); box-shadow: 0 6px 18px rgba(245,158,11,.38); }
+.btn-ambar { background: var(--ambar); color: #fff; box-shadow: 0 4px 14px rgba(242,115,74,.32); }
+.btn-ambar:hover { filter: brightness(1.04); box-shadow: 0 6px 18px rgba(242,115,74,.4); }
 .msg { font-size: 13.5px; margin-top: 8px; min-height: 18px; font-weight: 500; }
 .msg.erro { color: var(--erro); }
 .msg.ok { color: var(--sucesso); }
@@ -112,7 +121,7 @@ textarea { resize: vertical; min-height: 44px; }
 .tab span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .tab svg { width: 19px; height: 19px; }
 .tab.ativa { color: var(--azul); }
-.tab.ativa svg { filter: drop-shadow(0 2px 6px rgba(37,99,235,.35)); }
+.tab.ativa svg { filter: drop-shadow(0 2px 6px rgba(10,37,64,.35)); }
 .badge-plano {
   display: inline-block; background: var(--azul-tinta); color: var(--azul-escuro); font-size: 11px;
   font-weight: 700; padding: 3px 10px; border-radius: 999px; text-transform: uppercase; letter-spacing: .02em;
@@ -181,13 +190,13 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
   width: 100%; padding: 13px; border-radius: 14px; border: 1.5px dashed var(--ambar);
   background: #fffbeb; color: var(--ambar-escuro); font-size: 14px; font-weight: 700; cursor: pointer; margin-bottom: 14px;
 }
-.add-btn:hover { background: #fef3c7; }
+.add-btn:hover { background: #ffdccb; }
 .checkbox-row { display: flex; align-items: center; gap: 9px; margin-top: 14px; }
 .checkbox-row input { width: 19px; height: 19px; accent-color: var(--azul); }
 .checkbox-row label { margin: 0; color: var(--escuro); font-size: 14px; font-weight: 500; }
 .result {
   background: var(--gradiente); border-radius: 18px; padding: 20px; text-align: center;
-  box-shadow: 0 10px 30px rgba(37,99,235,.28);
+  box-shadow: 0 10px 30px rgba(10,37,64,.3);
 }
 .result .label { color: #dbf3fb; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
 .result .value { color: #fff; font-size: 34px; font-weight: 800; margin: 4px 0; font-family: "Manrope", sans-serif; }
@@ -278,7 +287,7 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
 }
 .atalho-btn svg { width: 20px; height: 20px; }
 .atalho-btn span { font-size: 12.5px; font-weight: 700; }
-.atalho-primario { background: var(--gradiente); color: #fff; box-shadow: 0 6px 18px rgba(37,99,235,.28); }
+.atalho-primario { background: var(--ambar); color: #fff; box-shadow: 0 6px 18px rgba(242,115,74,.3); }
 .atalho-secundario { background: var(--superficie); color: var(--azul); border: 1.5px solid var(--cinza-linha) !important; }
 .kanban-secao { margin-bottom: 16px; }
 .kanban-secao:last-child { margin-bottom: 0; }
