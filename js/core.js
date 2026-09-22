@@ -664,6 +664,8 @@ function mostrarAba(nome) {
       ${ajustesSecaoHtml('ajuda', 'Ajuda', ICONE_LIVRO, 'chip-ambar', `
         <a href="tutorial.html" target="_blank" class="btn btn-secundario" style="text-decoration:none; display:block; text-align:center;">📘 Como usar o Cosmos Clima</a>
       `)}
+
+      <p class="versao-app">Cosmos Clima ${esc(VERSAO_APP)}</p>
     `;
     carregarStatusGoogle();
     renderStatusAssinatura();
@@ -950,6 +952,10 @@ async function salvarDadosEmpresa() {
 }
 
 /* ===================== INÍCIO (DASHBOARD) ===================== */
+
+// Aparece no rodapé da aba Ajustes — ajuda a confirmar se um aparelho já pegou a última
+// atualização. Suba isso junto com o CACHE_NOME lá no sw.js sempre que publicar uma mudança.
+const VERSAO_APP = '2026.09.22.2';
 
 const FINANCEIRO_OCULTO_KEY = 'estelar_financeiro_oculto';
 const ONBOARDING_COLAPSADO_KEY = 'estelar_onboarding_colapsado';
