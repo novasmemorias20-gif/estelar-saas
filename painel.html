@@ -102,6 +102,61 @@ textarea { resize: vertical; min-height: 44px; }
 .btn-secundario:hover { background: var(--azul-tinta); border-color: var(--azul); box-shadow: none; }
 .btn-ambar { background: var(--ambar); color: #fff; box-shadow: 0 4px 14px rgba(242,115,74,.32); }
 .btn-ambar:hover { filter: brightness(1.04); box-shadow: 0 6px 18px rgba(242,115,74,.4); }
+
+.btn-perigo { background: var(--erro); box-shadow: 0 4px 14px rgba(220,38,38,.32); }
+.btn-perigo:hover { filter: brightness(1.06); box-shadow: 0 6px 18px rgba(220,38,38,.4); }
+
+.spinner-btn {
+  display: inline-block; width: 14px; height: 14px; margin-right: 8px; vertical-align: -2px;
+  border: 2px solid rgba(255,255,255,.45); border-top-color: #fff; border-radius: 50%;
+  animation: girar .7s linear infinite;
+}
+.icon-btn .spinner-btn {
+  margin-right: 0; border-color: rgba(100,116,139,.3); border-top-color: var(--cinza-texto);
+}
+@keyframes girar { to { transform: rotate(360deg); } }
+
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(10,20,35,.55); backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center; z-index: 999; padding: 20px;
+  animation: modalFade .15s ease;
+}
+@keyframes modalFade { from { opacity: 0; } to { opacity: 1; } }
+.modal-card {
+  background: var(--superficie); border-radius: 16px; padding: 22px; max-width: 380px; width: 100%;
+  box-shadow: 0 20px 50px rgba(0,0,0,.3); animation: modalPop .15s ease;
+}
+@keyframes modalPop { from { transform: scale(.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.modal-card h3 { margin: 0 0 10px; font-size: 17px; color: var(--escuro); }
+.modal-card p { margin: 0; font-size: 14px; color: var(--cinza-texto); line-height: 1.5; }
+.modal-acoes { display: flex; gap: 10px; margin-top: 20px; }
+.modal-acoes .btn { margin-top: 0; }
+
+.toast-container {
+  position: fixed; left: 0; right: 0; bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 1000;
+  display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0 16px; pointer-events: none;
+}
+.toast {
+  background: var(--azul-escuro); color: #fff; padding: 12px 18px; border-radius: 12px; font-size: 13.5px;
+  font-weight: 600; box-shadow: 0 10px 26px rgba(0,0,0,.28); max-width: 460px; text-align: center;
+  animation: toastEntra .2s ease;
+}
+.toast-erro { background: var(--erro); }
+.toast-sucesso { background: #15803d; }
+@keyframes toastEntra { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.toast-saindo { opacity: 0; transform: translateY(6px); transition: opacity .25s, transform .25s; }
+
+.offline-indicador {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 998; text-align: center;
+  font-size: 12.5px; font-weight: 700; color: #fff; padding: 0; max-height: 0; overflow: hidden;
+  transition: max-height .2s, padding .2s;
+}
+.offline-indicador.visivel { padding: calc(8px + env(safe-area-inset-top)) 12px 8px; max-height: 60px; }
+.offline-indicador.offline { background: var(--erro); }
+.offline-indicador.sincronizando { background: var(--azul-escuro); }
+
+.campo-invalido { border-color: var(--erro) !important; box-shadow: 0 0 0 3px rgba(220,38,38,.14) !important; }
+
 .msg { font-size: 13.5px; margin-top: 8px; min-height: 18px; font-weight: 500; }
 .msg.erro { color: var(--erro); }
 .msg.ok { color: var(--sucesso); }
@@ -145,11 +200,10 @@ textarea { resize: vertical; min-height: 44px; }
 .sidebar-rodape { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--cinza-linha); }
 .sidebar-toggle-modo { width: 100%; background: none; border: 1px solid var(--cinza-linha); border-radius: 10px; padding: 9px; font-size: 12.5px; color: var(--cinza-texto); cursor: pointer; font-family: inherit; }
 .desktop-main { flex: 1; min-width: 0; }
-#btnAlternarModoTopo { display: none; width: auto; }
+#btnAlternarModoTopo { display: inline-flex; align-items: center; justify-content: center; width: auto; }
 
 body.modo-desktop .sidebar-desktop { display: flex; }
 body.modo-desktop .topo-logo-mobile { display: none; }
-body.modo-desktop #btnAlternarModoTopo { display: inline-flex; align-items:center; justify-content:center; }
 body.modo-desktop .tabs { display: none; }
 body.modo-desktop .container { max-width: none; padding: 28px 36px calc(28px + env(safe-area-inset-bottom)); margin: 0; }
 body.modo-desktop #conteudo { max-width: 1180px; }
@@ -285,6 +339,35 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
 .card-icon-chip { width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .card-icon-chip svg { width: 17px; height: 17px; }
 .chip-azul { background: var(--azul-tinta); color: var(--azul-escuro); }
+
+.onboarding-card { padding-bottom: 6px; }
+.onboarding-cabecalho { display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+.onboarding-contador { font-size: 12.5px; font-weight: 700; color: var(--azul-escuro); background: var(--azul-tinta); padding: 3px 9px; border-radius: 20px; }
+.onboarding-chevron { color: var(--cinza-texto); transition: transform .2s; }
+.onboarding-chevron.colapsado { transform: rotate(-90deg); }
+.onboarding-progresso { height: 6px; border-radius: 4px; background: var(--cinza-linha); margin: 14px 0 4px; overflow: hidden; }
+.onboarding-progresso-fill { height: 100%; background: var(--gradiente); border-radius: 4px; transition: width .3s; }
+.onboarding-lista { margin-top: 6px; }
+.onboarding-item { display: flex; align-items: flex-start; gap: 12px; padding: 13px 0; border-top: 1px solid var(--cinza-linha); }
+.onboarding-item:first-child { border-top: none; }
+.onboarding-marca {
+  flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: var(--cinza-texto); border: 1.5px solid var(--cinza-linha); margin-top: 1px;
+}
+.onboarding-item.feito .onboarding-marca { background: var(--sucesso); border-color: var(--sucesso); color: #fff; }
+.onboarding-texto { flex: 1; min-width: 0; }
+.onboarding-titulo { font-size: 13.5px; font-weight: 700; color: var(--escuro); }
+.onboarding-item.feito .onboarding-titulo { color: var(--cinza-texto); text-decoration: line-through; }
+.onboarding-desc { font-size: 12px; color: var(--cinza-texto); margin-top: 2px; line-height: 1.4; }
+.onboarding-btn {
+  flex-shrink: 0; align-self: center; background: none; border: 1.5px solid var(--azul); color: var(--azul);
+  font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 20px; cursor: pointer; white-space: nowrap;
+}
+.onboarding-btn:hover { background: var(--azul-tinta); }
+@media (max-width: 380px) {
+  .onboarding-item { flex-wrap: wrap; }
+  .onboarding-btn { margin-left: 36px; }
+}
 .chip-ambar { background: var(--ambar-tinta); color: var(--ambar-escuro); }
 .chip-verde { background: var(--sucesso-bg); color: var(--sucesso); }
 .saudacao { font-family: "Manrope", sans-serif; font-weight: 800; font-size: 20px; color: var(--escuro); margin-bottom: 2px; }
@@ -333,6 +416,7 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
 </style>
 </head>
 <body>
+<div class="offline-indicador" id="offlineIndicador"></div>
 <div class="app-shell" id="appShell">
   <nav class="sidebar-desktop" id="sidebarDesktop">
     <div class="sidebar-marca">
