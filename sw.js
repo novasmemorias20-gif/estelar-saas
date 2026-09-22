@@ -1,7 +1,8 @@
 // Service worker do Cosmos Clima — cuidado ao editar.
 // Sobe esse número (ex: 'cosmos-v2') sempre que publicar uma atualização de painel.html/js,
 // senão quem já instalou o app pode continuar vendo a versão antiga por um tempo.
-const CACHE_NOME = 'cosmos-v1';
+// Atualize também o VERSAO_APP no topo do js/core.js (aparece na aba Ajustes).
+const CACHE_NOME = 'cosmos-v2';
 
 const ARQUIVOS_ESSENCIAIS = [
   './painel.html',
