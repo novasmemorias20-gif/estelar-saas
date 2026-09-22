@@ -5,6 +5,203 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const GOOGLE_AGENDA_HABILITADO = false; // true quando o app passar pela verificação do Google
 
+/* ===================== UI: confirmação, aviso e carregamento ===================== */
+
+function confirmarAcao(mensagem, opcoes) {
+  opcoes = opcoes || {};
+  const titulo = opcoes.titulo || 'Confirmar ação';
+  const textoConfirmar = opcoes.textoConfirmar || 'Confirmar';
+  const perigo = opcoes.perigo !== false; // por padrão trata como ação destrutiva
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-card" role="alertdialog" aria-modal="true">
+        <h3>${esc(titulo)}</h3>
+        <p>${esc(mensagem)}</p>
+        <div class="modal-acoes">
+          <button class="btn btn-secundario" id="modalCancelarBtn" type="button">Cancelar</button>
+          <button class="btn ${perigo ? 'btn-perigo' : ''}" id="modalConfirmarBtn" type="button">${esc(textoConfirmar)}</button>
+        </div>
+      </div>`;
+    function fechar(resultado) {
+      overlay.remove();
+      resolve(resultado);
+    }
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) fechar(false); });
+    overlay.querySelector('#modalCancelarBtn').addEventListener('click', () => fechar(false));
+    overlay.querySelector('#modalConfirmarBtn').addEventListener('click', () => fechar(true));
+    document.body.appendChild(overlay);
+    overlay.querySelector('#modalConfirmarBtn').focus();
+  });
+}
+
+function mostrarToast(mensagem, tipo) {
+  let container = document.getElementById('toastContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${tipo || 'erro'}`;
+  toast.textContent = mensagem;
+  container.appendChild(toast);
+  setTimeout(() => { toast.classList.add('toast-saindo'); setTimeout(() => toast.remove(), 250); }, 4000);
+}
+
+async function comCarregamento(botao, fn, textoCarregando) {
+  if (!botao || botao.dataset.carregando === '1') return;
+  const textoOriginal = botao.innerHTML;
+  botao.dataset.carregando = '1';
+  botao.disabled = true;
+  botao.innerHTML = `<span class="spinner-btn"></span>${esc(textoCarregando === undefined ? 'Salvando...' : textoCarregando)}`;
+  try {
+    await fn();
+  } finally {
+    if (document.body.contains(botao)) {
+      botao.disabled = false;
+      botao.innerHTML = textoOriginal;
+      delete botao.dataset.carregando;
+    }
+  }
+}
+
+function marcarCampoInvalido(el) {
+  if (!el) return;
+  el.classList.add('campo-invalido');
+  el.focus();
+  el.addEventListener('input', function limpar() { el.classList.remove('campo-invalido'); el.removeEventListener('input', limpar); }, { once: true });
+}
+
+/* ===================== MODO OFFLINE (cache local + fila de sincronização) =====================
+   Guarda em IndexedDB uma cópia dos dados já vistos (pra abrir sem internet) e uma fila de
+   ações feitas offline (hoje: status de OS), que é reenviada sozinha quando a conexão volta. */
+
+const OFFLINE_DB_NOME = 'cosmosOffline';
+const OFFLINE_DB_VERSAO = 1;
+
+function offlineAbrirDB() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) { reject(new Error('IndexedDB indisponível')); return; }
+    const req = indexedDB.open(OFFLINE_DB_NOME, OFFLINE_DB_VERSAO);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('cache')) db.createObjectStore('cache', { keyPath: 'chave' });
+      if (!db.objectStoreNames.contains('fila')) db.createObjectStore('fila', { keyPath: 'id' });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function offlineCacheSalvar(chave, dados) {
+  try {
+    const db = await offlineAbrirDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction('cache', 'readwrite');
+      tx.objectStore('cache').put({ chave, dados, atualizadoEm: Date.now() });
+      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) { /* cache é best-effort — se falhar, segue sem cache */ }
+}
+
+async function offlineCacheLer(chave) {
+  try {
+    const db = await offlineAbrirDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction('cache', 'readonly');
+      const req = tx.objectStore('cache').get(chave);
+      req.onsuccess = () => resolve(req.result ? req.result.dados : null);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (e) { return null; }
+}
+
+async function offlineFilaAdicionar(acao) {
+  const item = Object.assign({ id: (crypto.randomUUID ? crypto.randomUUID() : 'a' + Date.now() + Math.random()), criadoEm: Date.now() }, acao);
+  try {
+    const db = await offlineAbrirDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction('fila', 'readwrite');
+      tx.objectStore('fila').put(item);
+      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) { /* sem IndexedDB não dá pra enfileirar — chamador trata o erro */ throw e; }
+  offlineAtualizarIndicador();
+  return item;
+}
+
+async function offlineFilaListar() {
+  try {
+    const db = await offlineAbrirDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction('fila', 'readonly');
+      const req = tx.objectStore('fila').getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (e) { return []; }
+}
+
+async function offlineFilaRemover(id) {
+  try {
+    const db = await offlineAbrirDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction('fila', 'readwrite');
+      tx.objectStore('fila').delete(id);
+      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) { /* ignora */ }
+}
+
+let offlineSincronizando = false;
+async function offlineSincronizar() {
+  if (offlineSincronizando || !navigator.onLine) return;
+  offlineSincronizando = true;
+  try {
+    const fila = (await offlineFilaListar()).sort((a, b) => a.criadoEm - b.criadoEm);
+    for (const item of fila) {
+      try {
+        let ok = false;
+        if (item.tipo === 'os_status_funcionario') {
+          const { error } = await supabaseClient.rpc('funcionario_atualizar_status_os', { p_os_id: item.osId, p_novo_status: item.novoStatus });
+          ok = !error;
+        } else if (item.tipo === 'os_atualizar') {
+          const { error } = await supabaseClient.from('ordens_servico').update(item.dados).eq('id', item.osId);
+          ok = !error;
+        }
+        if (ok) await offlineFilaRemover(item.id);
+      } catch (e) { /* mantém na fila e tenta de novo na próxima sincronização */ }
+    }
+  } finally {
+    offlineSincronizando = false;
+    offlineAtualizarIndicador();
+  }
+}
+
+async function offlineAtualizarIndicador() {
+  const badge = document.getElementById('offlineIndicador');
+  if (!badge) return;
+  const fila = await offlineFilaListar();
+  if (!navigator.onLine) {
+    badge.className = 'offline-indicador visivel offline';
+    badge.textContent = fila.length ? `🔌 Offline — ${fila.length} pendente${fila.length > 1 ? 's' : ''} pra sincronizar` : '🔌 Você está offline — mostrando os últimos dados salvos';
+  } else if (fila.length) {
+    badge.className = 'offline-indicador visivel sincronizando';
+    badge.textContent = `🔄 Sincronizando ${fila.length} pendente${fila.length > 1 ? 's' : ''}...`;
+  } else {
+    badge.className = 'offline-indicador';
+    badge.textContent = '';
+  }
+}
+
+window.addEventListener('online', () => { offlineAtualizarIndicador(); offlineSincronizar(); });
+window.addEventListener('offline', () => offlineAtualizarIndicador());
+setInterval(offlineSincronizar, 30000);
+
+
 function temAcessoCompleto() {
   if (!empresaAtual) return false;
   if (empresaAtual.cortesia) return true;
@@ -96,6 +293,7 @@ async function iniciar() {
     aplicarModoVisual(decidirModoVisualInicial(), false);
     document.getElementById('btnAlternarModoTopo')?.addEventListener('click', alternarModoVisual);
     document.getElementById('btnAlternarModoSidebar')?.addEventListener('click', alternarModoVisual);
+    if (!navigator.onLine) throw new Error('sem conexão');
     const { data: { session }, error: erroSessao } = await supabaseClient.auth.getSession();
     if (erroSessao) throw erroSessao;
     if (!session) { window.location.href = "login.html"; return; }
@@ -112,6 +310,7 @@ async function iniciar() {
         modoFuncionario = true;
         funcionarioNome = funcionario.nome;
         empresaAtual = empresaFuncionario;
+        offlineCacheSalvar('sessao_identidade', { modoFuncionario, funcionarioNome, empresaAtual });
         iniciarModoFuncionario();
         return;
       }
@@ -127,10 +326,28 @@ async function iniciar() {
     }
 
     empresaAtual = empresa;
+    offlineCacheSalvar('sessao_identidade', { modoFuncionario: false, funcionarioNome: null, empresaAtual });
     document.getElementById("nomeEmpresa").textContent = empresaAtual.nome_empresa;
     document.getElementById("badgePlano").textContent = { completo: "Plano Completo", basico: "Plano Básico" }[planoEfetivo()] || "Plano Grátis";
+    offlineAtualizarIndicador();
+    offlineSincronizar();
     mostrarAba("inicio");
   } catch (e) {
+    const salvo = await offlineCacheLer('sessao_identidade');
+    if (salvo && salvo.empresaAtual) {
+      modoFuncionario = salvo.modoFuncionario;
+      funcionarioNome = salvo.funcionarioNome;
+      empresaAtual = salvo.empresaAtual;
+      if (modoFuncionario) {
+        iniciarModoFuncionario();
+      } else {
+        document.getElementById("nomeEmpresa").textContent = empresaAtual.nome_empresa;
+        document.getElementById("badgePlano").textContent = { completo: "Plano Completo", basico: "Plano Básico" }[planoEfetivo()] || "Plano Grátis";
+        offlineAtualizarIndicador();
+        mostrarAba("inicio");
+      }
+      return;
+    }
     document.getElementById("conteudo").innerHTML = '<div class="card"><p class="msg erro">Não foi possível carregar: ' + e.message + '</p></div>';
   }
 }
@@ -140,6 +357,8 @@ let funcAbaAtual = 'os';
 function iniciarModoFuncionario() {
   document.getElementById("nomeEmpresa").textContent = empresaAtual.nome_empresa;
   document.getElementById("badgePlano").textContent = funcionarioNome + ' · Ajudante';
+  offlineAtualizarIndicador();
+  offlineSincronizar();
 
   const tabsEl = document.querySelector('.tabs');
   if (tabsEl) {
@@ -180,21 +399,38 @@ function renderFuncAba() {
 async function renderFuncOsLista() {
   const conteudo = document.getElementById('conteudo');
   conteudo.innerHTML = '<div class="card"><p class="vazio">Carregando...</p></div>';
-  const { data: itens, error } = await supabaseClient.from('ordens_servico_funcionario')
-    .select('*')
-    .eq('empresa_id', empresaAtual.id)
-    .order('created_at', { ascending: false });
-  if (error) { conteudo.innerHTML = `<div class="card"><p class="msg erro">Erro ao carregar: ${esc(error.message)}</p></div>`; return; }
 
-  // A view não carrega FK, então busca clientes/agenda à parte e junta aqui
-  const idsClientes = [...new Set((itens || []).map(o => o.cliente_id).filter(Boolean))];
-  const idsAgenda = [...new Set((itens || []).map(o => o.agenda_id).filter(Boolean))];
-  const [{ data: clientesData }, { data: agendaData }] = await Promise.all([
-    idsClientes.length ? supabaseClient.from('clientes').select('id, nome').in('id', idsClientes) : { data: [] },
-    idsAgenda.length ? supabaseClient.from('agenda').select('id, data_hora').in('id', idsAgenda) : { data: [] }
-  ]);
-  const clientesPorId = Object.fromEntries((clientesData || []).map(c => [c.id, c]));
-  const agendaPorId = Object.fromEntries((agendaData || []).map(a => [a.id, a]));
+  let itens = null, clientesPorId = {}, agendaPorId = {};
+  if (navigator.onLine) {
+    const { data, error } = await supabaseClient.from('ordens_servico_funcionario')
+      .select('*')
+      .eq('empresa_id', empresaAtual.id)
+      .order('created_at', { ascending: false });
+    if (!error) {
+      itens = data || [];
+      // A view não carrega FK, então busca clientes/agenda à parte e junta aqui
+      const idsClientes = [...new Set(itens.map(o => o.cliente_id).filter(Boolean))];
+      const idsAgenda = [...new Set(itens.map(o => o.agenda_id).filter(Boolean))];
+      const [{ data: clientesData }, { data: agendaData }] = await Promise.all([
+        idsClientes.length ? supabaseClient.from('clientes').select('id, nome').in('id', idsClientes) : { data: [] },
+        idsAgenda.length ? supabaseClient.from('agenda').select('id, data_hora').in('id', idsAgenda) : { data: [] }
+      ]);
+      clientesPorId = Object.fromEntries((clientesData || []).map(c => [c.id, c]));
+      agendaPorId = Object.fromEntries((agendaData || []).map(a => [a.id, a]));
+      offlineCacheSalvar('func_os_lista', itens);
+      offlineCacheSalvar('func_clientes_por_id', clientesPorId);
+      offlineCacheSalvar('func_agenda_por_id', agendaPorId);
+    }
+  }
+  if (itens === null) {
+    itens = await offlineCacheLer('func_os_lista');
+    clientesPorId = (await offlineCacheLer('func_clientes_por_id')) || {};
+    agendaPorId = (await offlineCacheLer('func_agenda_por_id')) || {};
+  }
+  if (itens === null) {
+    conteudo.innerHTML = `<div class="card"><p class="msg erro">Sem internet e sem nenhuma Ordem de Serviço salva neste aparelho ainda. Conecte uma vez antes de ir a campo.</p></div>`;
+    return;
+  }
 
   const statusLabel = { aberta: 'Aberta', em_andamento: 'Em andamento', concluida: 'Concluída' };
   const statusCor = { aberta: 'agendado', em_andamento: 'agendado', concluida: 'concluido' };
@@ -222,16 +458,26 @@ async function renderFuncOsLista() {
 async function renderFuncOsDetalhe(osId) {
   const conteudo = document.getElementById('conteudo');
   conteudo.innerHTML = '<div class="card"><p class="vazio">Carregando...</p></div>';
-  const { data: os, error } = await supabaseClient.from('ordens_servico_funcionario')
-    .select('*')
-    .eq('id', osId).maybeSingle();
-  if (error || !os) { conteudo.innerHTML = `<div class="card"><p class="msg erro">Não foi possível abrir esta OS.</p></div>`; return; }
 
-  let cliente = null;
-  if (os.cliente_id) {
-    const { data } = await supabaseClient.from('clientes').select('nome, telefone, endereco').eq('id', os.cliente_id).maybeSingle();
-    cliente = data;
+  let os = null, cliente = null;
+  if (navigator.onLine) {
+    const { data, error } = await supabaseClient.from('ordens_servico_funcionario')
+      .select('*')
+      .eq('id', osId).maybeSingle();
+    if (!error && data) {
+      os = data;
+      if (os.cliente_id) {
+        const { data: dadosCliente } = await supabaseClient.from('clientes').select('nome, telefone, endereco').eq('id', os.cliente_id).maybeSingle();
+        cliente = dadosCliente || null;
+      }
+      offlineCacheSalvar('func_os_detalhe_' + osId, { os, cliente });
+    }
   }
+  if (!os) {
+    const salvo = await offlineCacheLer('func_os_detalhe_' + osId);
+    if (salvo) { os = salvo.os; cliente = salvo.cliente; }
+  }
+  if (!os) { conteudo.innerHTML = `<div class="card"><p class="msg erro">Não foi possível abrir esta OS${navigator.onLine ? '' : ' sem internet (ainda não foi salva neste aparelho)'}.</p></div>`; return; }
 
   conteudo.innerHTML = `
     <span class="voltar-link" id="funcVoltarLista">← Voltar</span>
@@ -252,14 +498,28 @@ async function renderFuncOsDetalhe(osId) {
     ${relatorioFotosHtml()}
   `;
   document.getElementById('funcVoltarLista').addEventListener('click', renderFuncOsLista);
-  document.getElementById('funcSalvarStatusBtn').addEventListener('click', () => funcSalvarStatus(os.id));
+  document.getElementById('funcSalvarStatusBtn').addEventListener('click', (e) => comCarregamento(e.currentTarget, () => funcSalvarStatus(os.id)));
   ligarEventosRelatorio(os, cliente);
 }
 
 async function funcSalvarStatus(osId) {
   const msg = document.getElementById('funcStatusMsg');
   const novoStatus = document.getElementById('funcOsStatus').value;
+  if (!navigator.onLine) {
+    try {
+      await offlineFilaAdicionar({ tipo: 'os_status_funcionario', osId, novoStatus });
+      const detalhe = await offlineCacheLer('func_os_detalhe_' + osId);
+      if (detalhe) { detalhe.os.status = novoStatus; await offlineCacheSalvar('func_os_detalhe_' + osId, detalhe); }
+      const lista = await offlineCacheLer('func_os_lista');
+      if (lista) await offlineCacheSalvar('func_os_lista', lista.map(o => o.id === osId ? Object.assign({}, o, { status: novoStatus }) : o));
+      msg.className = 'msg ok'; msg.textContent = 'Sem internet — salvo neste aparelho. Será enviado assim que a conexão voltar.';
+    } catch (e) {
+      msg.className = 'msg erro'; msg.textContent = 'Não foi possível salvar offline neste aparelho.';
+    }
+    return;
+  }
   msg.className = 'msg'; msg.textContent = 'Salvando...';
+
   const { error } = await supabaseClient.rpc('funcionario_atualizar_status_os', { p_os_id: osId, p_novo_status: novoStatus });
   if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro: ' + error.message; return; }
   msg.className = 'msg ok'; msg.textContent = 'Status atualizado!';
@@ -268,12 +528,16 @@ async function funcSalvarStatus(osId) {
 async function renderFuncAgenda() {
   const conteudo = document.getElementById('conteudo');
   conteudo.innerHTML = '<div class="card"><p class="vazio">Carregando...</p></div>';
-  const { data, error } = await supabaseClient.from('agenda')
-    .select('*, clientes(nome)')
-    .eq('empresa_id', empresaAtual.id)
-    .order('data_hora', { ascending: true });
-  if (error) { conteudo.innerHTML = `<div class="card"><p class="msg erro">Erro ao carregar: ${esc(error.message)}</p></div>`; return; }
-  const itens = data || [];
+  let itens = null;
+  if (navigator.onLine) {
+    const { data, error } = await supabaseClient.from('agenda')
+      .select('*, clientes(nome)')
+      .eq('empresa_id', empresaAtual.id)
+      .order('data_hora', { ascending: true });
+    if (!error) { itens = data || []; offlineCacheSalvar('func_agenda_lista', itens); }
+  }
+  if (itens === null) itens = await offlineCacheLer('func_agenda_lista');
+  if (itens === null) { conteudo.innerHTML = `<div class="card"><p class="msg erro">Sem internet e sem agenda salva neste aparelho ainda.</p></div>`; return; }
   conteudo.innerHTML = `
     <div class="topo" style="margin-bottom:14px;"><h2 style="margin:0;">Agenda</h2></div>
     ${itens.length ? itens.map(a => `
@@ -316,7 +580,7 @@ function mostrarAba(nome) {
         <label>Endereço / Cidade</label><input type="text" id="cfgEndereco" placeholder="Bairro, cidade - UF" value="${esc(emp.endereco || '')}">
         <label>Telefone comercial</label><input type="text" id="cfgTelefone" placeholder="(18) 99169-0009" value="${esc(emp.telefone || '')}">
         <label>E-mail comercial</label><input type="text" id="cfgEmail" placeholder="contato@empresa.com" value="${esc(emp.email || '')}">
-        <button class="btn" onclick="salvarDadosEmpresa()">Salvar</button>
+        <button class="btn" id="salvarDadosEmpresaBtn">Salvar</button>
         <div class="msg" id="msgConfig"></div>
       `, true)}
 
@@ -404,6 +668,7 @@ function mostrarAba(nome) {
     carregarStatusGoogle();
     renderStatusAssinatura();
     document.getElementById('btnVincularGoogle').addEventListener('click', vincularGoogle);
+    document.getElementById('salvarDadosEmpresaBtn').addEventListener('click', (e) => comCarregamento(e.currentTarget, salvarDadosEmpresa));
     document.getElementById('btnConectarGoogleAgenda')?.addEventListener('click', conectarGoogleAgenda);
     document.getElementById('chkTemaEscuro').checked = localStorage.getItem(TEMA_ESCURO_KEY) === '1';
     document.getElementById('chkTemaEscuro').addEventListener('change', (e) => aplicarTema(e.target.checked));
@@ -668,7 +933,7 @@ async function conectarGoogleAgenda() {
 async function salvarDadosEmpresa() {
   const novoNome = document.getElementById("inputNome").value.trim();
   const msgEl = document.getElementById("msgConfig");
-  if (!novoNome) { msgEl.className = "msg erro"; msgEl.textContent = "Digite um nome válido."; return; }
+  if (!novoNome) { msgEl.className = "msg erro"; msgEl.textContent = "Digite um nome válido."; marcarCampoInvalido(document.getElementById('inputNome')); return; }
   const dadosEmpresa = {
     cnpj: document.getElementById('cfgCnpj').value.trim(),
     endereco: document.getElementById('cfgEndereco').value.trim(),
@@ -687,6 +952,41 @@ async function salvarDadosEmpresa() {
 /* ===================== INÍCIO (DASHBOARD) ===================== */
 
 const FINANCEIRO_OCULTO_KEY = 'estelar_financeiro_oculto';
+const ONBOARDING_COLAPSADO_KEY = 'estelar_onboarding_colapsado';
+
+function onboardingChecklistHtml(passos) {
+  const total = passos.length;
+  const feitos = passos.filter(p => p.feito).length;
+  if (feitos >= total) return '';
+  const colapsado = localStorage.getItem(ONBOARDING_COLAPSADO_KEY) === '1';
+  const pct = Math.round((feitos / total) * 100);
+  return `
+    <div class="card onboarding-card">
+      <div class="onboarding-cabecalho" id="onboardingToggle">
+        <div class="card-titulo" style="margin-bottom:0;">
+          <div class="card-icon-chip chip-azul"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONE_BANDEIRA}</svg></div>
+          <h3>Primeiros passos</h3>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span class="onboarding-contador">${feitos}/${total}</span>
+          <svg class="onboarding-chevron ${colapsado ? 'colapsado' : ''}" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+      </div>
+      <div class="onboarding-progresso"><div class="onboarding-progresso-fill" style="width:${pct}%"></div></div>
+      <div class="onboarding-lista ${colapsado ? 'hidden' : ''}" id="onboardingLista">
+        ${passos.map((p, i) => `
+          <div class="onboarding-item ${p.feito ? 'feito' : ''}">
+            <div class="onboarding-marca">${p.feito ? `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">${ICONE_CHECK}</svg>` : (i + 1)}</div>
+            <div class="onboarding-texto">
+              <div class="onboarding-titulo">${esc(p.titulo)}</div>
+              <div class="onboarding-desc">${esc(p.descricao)}</div>
+            </div>
+            ${p.feito ? '' : `<button class="onboarding-btn" data-onboarding-passo="${i}">Fazer →</button>`}
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+}
 const TEMA_ESCURO_KEY = 'estelar_tema_escuro';
 
 function aplicarTema(escuro) {
@@ -811,15 +1111,19 @@ const ICONE_DOWNLOAD = '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><po
 const ICONE_SLIDERS = '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>';
 const ICONE_LIVRO = '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>';
 const ICONE_CORACAO = '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>';
+const ICONE_BANDEIRA = '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>';
+const ICONE_CHECK = '<polyline points="20 6 9 17 4 12"/>';
 
 async function renderInicio() {
   const conteudo = document.getElementById("conteudo");
   conteudo.innerHTML = '<div class="card"><p class="vazio">Carregando...</p></div>';
 
-  const [{ data: osData }, { data: clientesData }, { data: agendaConcluida }] = await Promise.all([
+  const [{ data: osData }, { data: clientesData }, { data: agendaConcluida }, { count: orcamentosCount }, { count: contratosCount }] = await Promise.all([
     supabaseClient.from('ordens_servico').select('id,status,valor,pago,data_pagamento,descricao,created_at,clientes(nome)').eq('empresa_id', empresaAtual.id).order('created_at', { ascending: false }),
     supabaseClient.from('clientes').select('id,nome,intervalo_retorno_dias').eq('empresa_id', empresaAtual.id),
-    supabaseClient.from('agenda').select('cliente_id,data_hora').eq('empresa_id', empresaAtual.id).eq('status', 'concluido').order('data_hora', { ascending: false })
+    supabaseClient.from('agenda').select('cliente_id,data_hora').eq('empresa_id', empresaAtual.id).eq('status', 'concluido').order('data_hora', { ascending: false }),
+    supabaseClient.from('orcamentos').select('id', { count: 'exact', head: true }).eq('empresa_id', empresaAtual.id),
+    supabaseClient.from('contratos').select('id', { count: 'exact', head: true }).eq('empresa_id', empresaAtual.id)
   ]);
 
   const os = osData || [];
@@ -935,11 +1239,21 @@ async function renderInicio() {
     </div>
   `;
 
+  const dadosEmpresaCfg = empresaAtual.precos.dadosEmpresa || {};
+  const passosOnboarding = [
+    { feito: empresaAtual.nome_empresa !== 'Minha Empresa' && !!dadosEmpresaCfg.telefone, titulo: 'Complete os dados da sua empresa', descricao: 'Nome, telefone e endereço aparecem nos orçamentos e contratos enviados ao cliente.', aba: 'config' },
+    { feito: (clientesData || []).length > 0, titulo: 'Cadastre seu primeiro cliente', descricao: 'É a partir dele que você gera orçamentos, contratos e agenda visitas.', aba: 'clientes' },
+    { feito: (orcamentosCount || 0) > 0 || (contratosCount || 0) > 0, titulo: 'Gere um orçamento ou contrato', descricao: 'Monte uma proposta e envie direto pelo WhatsApp ou em PDF.', aba: 'avulso' },
+    { feito: os.length > 0, titulo: 'Crie sua primeira Ordem de Serviço', descricao: 'Acompanhe o serviço do agendamento até o pagamento.', aba: null }
+  ];
+  const onboardingHtml = onboardingChecklistHtml(passosOnboarding);
+
   conteudo.innerHTML = `
     <div class="saudacao">${saudacaoAtual()}, ${esc(empresaAtual.nome_empresa)}</div>
     <div class="saudacao-sub">${hoje.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}</div>
 
     ${trialBannerHtml()}
+    ${onboardingHtml}
 
     <div class="atalhos-row">
       <button class="atalho-btn atalho-primario" id="btnAtalhoNovaOS">
@@ -1002,6 +1316,19 @@ async function renderInicio() {
   document.getElementById('btnIniciarTrial')?.addEventListener('click', iniciarTrialCompleto);
   document.getElementById('btnDispensarTrial')?.addEventListener('click', dispensarTrialBanner);
   document.getElementById('btnVerPlanosTrial')?.addEventListener('click', () => mostrarAba('config'));
+  document.getElementById('onboardingToggle')?.addEventListener('click', () => {
+    const colapsadoAgora = localStorage.getItem(ONBOARDING_COLAPSADO_KEY) === '1';
+    localStorage.setItem(ONBOARDING_COLAPSADO_KEY, colapsadoAgora ? '0' : '1');
+    document.getElementById('onboardingLista').classList.toggle('hidden');
+    document.querySelector('.onboarding-chevron').classList.toggle('colapsado');
+  });
+  conteudo.querySelectorAll('[data-onboarding-passo]').forEach(el => {
+    el.addEventListener('click', () => {
+      const passo = passosOnboarding[parseInt(el.getAttribute('data-onboarding-passo'))];
+      if (passo.aba) mostrarAba(passo.aba);
+      else irParaNovaOS();
+    });
+  });
 }
 
 let _graficoReceitaChart = null, _graficoOsChart = null;
@@ -1287,7 +1614,7 @@ async function renderClientes() {
     document.getElementById("clAbrirFormBtn").classList.add("hidden");
     document.getElementById("clNome").focus();
   });
-  document.getElementById("clSalvarBtn").addEventListener("click", clSalvarNovo);
+  document.getElementById("clSalvarBtn").addEventListener("click", (e) => comCarregamento(e.currentTarget, clSalvarNovo));
   document.getElementById("clBusca").addEventListener("input", (e) => clRenderLista(e.target.value.trim().toLowerCase()));
   await clCarregarLista();
 }
@@ -1369,7 +1696,7 @@ function clRenderLista(termo) {
     });
   });
   listaEl.querySelectorAll('[data-del-cliente]').forEach(btn => {
-    btn.addEventListener('click', (e) => { e.stopPropagation(); clExcluir(btn.getAttribute('data-del-cliente')); });
+    btn.addEventListener('click', (e) => { e.stopPropagation(); comCarregamento(e.currentTarget, () => clExcluir(btn.getAttribute('data-del-cliente')), ''); });
   });
 }
 
@@ -1493,7 +1820,7 @@ async function clVerDetalhes(id) {
     el.addEventListener('click', () => osAbrirComContexto({ osId: el.getAttribute('data-abrir-os') }));
   });
   conteudo.querySelectorAll('[data-del-contrato]').forEach(el => {
-    el.addEventListener('click', () => ctExcluirContrato(el.getAttribute('data-del-contrato'), id));
+    el.addEventListener('click', (e) => comCarregamento(e.currentTarget, () => ctExcluirContrato(el.getAttribute('data-del-contrato'), id), ''));
   });
 
   const selIntervalo = document.getElementById('clIntervaloEdit');
@@ -1527,7 +1854,7 @@ function clMostrarEdicao(cliente) {
       <button class="btn btn-secundario" id="clEditCancelarBtn">Cancelar</button>
     </div>
   `;
-  document.getElementById('clEditSalvarBtn').addEventListener('click', () => clSalvarEdicao(cliente.id));
+  document.getElementById('clEditSalvarBtn').addEventListener('click', (e) => comCarregamento(e.currentTarget, () => clSalvarEdicao(cliente.id)));
   document.getElementById('clEditCancelarBtn').addEventListener('click', () => clVerDetalhes(cliente.id));
 }
 
@@ -1549,9 +1876,9 @@ async function clSalvarEdicao(id) {
 }
 
 async function ctExcluirContrato(contratoId, clienteId) {
-  if (!confirm('Excluir este contrato? Essa ação não pode ser desfeita.')) return;
+  if (!(await confirmarAcao('Excluir este contrato? Essa ação não pode ser desfeita.'))) return;
   const { error } = await supabaseClient.from('contratos').delete().eq('id', contratoId);
-  if (error) { alert('Erro ao excluir contrato.'); return; }
+  if (error) { mostrarToast('Erro ao excluir contrato.', 'erro'); return; }
   await clVerDetalhes(clienteId);
 }
 
@@ -1598,14 +1925,14 @@ async function clVerOrcamento(orcamentoId, clienteId) {
   `;
   document.getElementById('orcVoltarBtn').addEventListener('click', () => clVerDetalhes(clienteId));
   document.getElementById('orcCriarOSBtn').addEventListener('click', () => osAbrirComContexto({ agendaId: null, orcamentoId }));
-  document.getElementById('orcExcluirBtn').addEventListener('click', () => orcExcluir(orcamentoId, clienteId));
+  document.getElementById('orcExcluirBtn').addEventListener('click', (e) => comCarregamento(e.currentTarget, () => orcExcluir(orcamentoId, clienteId), 'Excluindo...'));
 }
 
 async function orcExcluir(orcamentoId, clienteId) {
-  if (!confirm('Excluir este orçamento? Se houver uma Ordem de Serviço vinculada a ele, ela deixará de estar associada a este orçamento, mas não será apagada. Essa ação não pode ser desfeita.')) return;
+  if (!(await confirmarAcao('Excluir este orçamento? Se houver uma Ordem de Serviço vinculada a ele, ela deixará de estar associada a este orçamento, mas não será apagada. Essa ação não pode ser desfeita.'))) return;
   await supabaseClient.from('ordens_servico').update({ orcamento_id: null }).eq('orcamento_id', orcamentoId);
   const { error } = await supabaseClient.from('orcamentos').delete().eq('id', orcamentoId);
-  if (error) { alert('Erro ao excluir orçamento.'); return; }
+  if (error) { mostrarToast('Erro ao excluir orçamento.', 'erro'); return; }
   await clVerDetalhes(clienteId);
 }
 
@@ -1635,7 +1962,7 @@ async function osAbrirComContexto(ctx) {
 async function clSalvarNovo() {
   const nome = document.getElementById('clNome').value.trim();
   const msg = document.getElementById('clMsg');
-  if (!nome) { msg.className = 'msg erro'; msg.textContent = 'Digite o nome do cliente.'; return; }
+  if (!nome) { msg.className = 'msg erro'; msg.textContent = 'Digite o nome do cliente.'; marcarCampoInvalido(document.getElementById('clNome')); return; }
   if (planoEfetivo() === 'gratis' && clientesCache.length >= LIMITE_CLIENTES_GRATIS) {
     msg.className = 'msg erro';
     msg.textContent = `O plano grátis permite até ${LIMITE_CLIENTES_GRATIS} clientes. Assine o Básico ou o Completo pra continuar cadastrando.`;
@@ -1658,14 +1985,14 @@ async function clSalvarNovo() {
 }
 
 async function clExcluir(id) {
-  if (!confirm('Excluir este cliente? Isso também apaga os orçamentos, agendamentos, ordens de serviço e contratos vinculados a ele. Essa ação não pode ser desfeita.')) return;
+  if (!(await confirmarAcao('Excluir este cliente? Isso também apaga os orçamentos, agendamentos, ordens de serviço e contratos vinculados a ele. Essa ação não pode ser desfeita.'))) return;
   const { data: agendaDoCliente } = await supabaseClient.from('agenda').select('google_event_id').eq('cliente_id', id).not('google_event_id', 'is', null);
   await supabaseClient.from('ordens_servico').delete().eq('cliente_id', id);
   await supabaseClient.from('agenda').delete().eq('cliente_id', id);
   await supabaseClient.from('orcamentos').delete().eq('cliente_id', id);
   await supabaseClient.from('contratos').delete().eq('cliente_id', id);
   const { error } = await supabaseClient.from('clientes').delete().eq('id', id);
-  if (error) { alert('Erro ao excluir cliente.'); return; }
+  if (error) { mostrarToast('Erro ao excluir cliente.', 'erro'); return; }
   (agendaDoCliente || []).forEach(a => sincronizarGoogleCalendar({ acao: 'excluir', empresaId: empresaAtual.id, googleEventId: a.google_event_id }));
   await clCarregarLista();
 }
@@ -1722,7 +2049,7 @@ async function renderAgenda() {
     document.getElementById("agFormCard").classList.remove("hidden");
     document.getElementById("agTitulo").focus();
   });
-  document.getElementById("agSalvarBtn").addEventListener("click", agSalvarNovo);
+  document.getElementById("agSalvarBtn").addEventListener("click", (e) => comCarregamento(e.currentTarget, agSalvarNovo));
   document.getElementById("agVerKanbanBtn").addEventListener("click", () => { agModo = 'kanban'; agAtualizarDinamico(); });
   await agAtualizarDinamico();
 }
@@ -1731,7 +2058,12 @@ async function agSalvarNovo() {
   const titulo = document.getElementById('agTitulo').value.trim();
   const dataHora = document.getElementById('agDataHora').value;
   const msg = document.getElementById('agMsg');
-  if (!titulo || !dataHora) { msg.className = 'msg erro'; msg.textContent = 'Preencha título e data/hora.'; return; }
+  if (!titulo || !dataHora) {
+    msg.className = 'msg erro'; msg.textContent = 'Preencha título e data/hora.';
+    if (!titulo) marcarCampoInvalido(document.getElementById('agTitulo'));
+    else marcarCampoInvalido(document.getElementById('agDataHora'));
+    return;
+  }
   const clienteId = document.getElementById('agCliente').value || null;
   const { data: novoAg, error } = await supabaseClient.from('agenda').insert({
     empresa_id: empresaAtual.id,
@@ -1849,9 +2181,9 @@ async function agRenderCompromisso(card) {
     <button class="btn btn-secundario" id="cpExcluirBtn" style="color:var(--erro); border-color:var(--erro);">Excluir este compromisso</button>
   `;
   document.getElementById('cpVoltarBtn').addEventListener('click', () => { agModo = 'dia'; agAtualizarDinamico(); });
-  document.getElementById('cpSalvarBtn').addEventListener('click', cpSalvar);
+  document.getElementById('cpSalvarBtn').addEventListener('click', (e) => comCarregamento(e.currentTarget, cpSalvar));
   document.getElementById('cpAbrirOSBtn')?.addEventListener('click', () => osAbrirComContexto({ osId: osVinculada.id }));
-  document.getElementById('cpExcluirBtn').addEventListener('click', cpExcluir);
+  document.getElementById('cpExcluirBtn').addEventListener('click', (e) => comCarregamento(e.currentTarget, cpExcluir, 'Excluindo...'));
   if (ag.cliente_id) document.getElementById('cpVerClienteBtn').addEventListener('click', () => irParaFichaCliente(ag.cliente_id));
 }
 
@@ -1871,7 +2203,7 @@ async function cpSalvar() {
 }
 
 async function cpExcluir() {
-  if (!confirm('Excluir este compromisso? Se houver uma Ordem de Serviço vinculada, ela deixará de estar associada a um agendamento, mas não será apagada. Essa ação não pode ser desfeita.')) return;
+  if (!(await confirmarAcao('Excluir este compromisso? Se houver uma Ordem de Serviço vinculada, ela deixará de estar associada a um agendamento, mas não será apagada. Essa ação não pode ser desfeita.'))) return;
   const msg = document.getElementById('cpMsg');
   const { data: agAntiga } = await supabaseClient.from('agenda').select('google_event_id').eq('id', agAgendaSelecionadaId).maybeSingle();
   await supabaseClient.from('ordens_servico').update({ agenda_id: null }).eq('agenda_id', agAgendaSelecionadaId);
@@ -2134,8 +2466,8 @@ async function agRenderOS(card) {
   document.getElementById('osPago')?.addEventListener('change', (e) => {
     document.getElementById('osFormaPagamentoWrap').classList.toggle('hidden', !e.target.checked);
   });
-  document.getElementById('osSalvarBtn').addEventListener('click', () => osSalvar(osExistente ? osExistente.id : null));
-  document.getElementById('osExcluirBtn')?.addEventListener('click', () => osExcluir(osExistente.id));
+  document.getElementById('osSalvarBtn').addEventListener('click', (e) => comCarregamento(e.currentTarget, () => osSalvar(osExistente ? osExistente.id : null)));
+  document.getElementById('osExcluirBtn')?.addEventListener('click', (e) => comCarregamento(e.currentTarget, () => osExcluir(osExistente.id), 'Excluindo...'));
   document.getElementById('osConfirmarAgendaBtn')?.addEventListener('click', () => osConfirmarAgendamento(osExistente.id));
   if (osExistente) ligarEventosRelatorio(osExistente, clienteInfo);
   if (osExistente && !osExistente.pago) ligarEventosCobrancaPix(osExistente, clienteInfo);
@@ -2643,7 +2975,7 @@ async function osSalvar(osId) {
 }
 
 async function osExcluir(osId) {
-  if (!confirm('Excluir esta ordem de serviço? Essa ação não pode ser desfeita.')) return;
+  if (!(await confirmarAcao('Excluir esta ordem de serviço? Essa ação não pode ser desfeita.'))) return;
   const msg = document.getElementById('osMsg');
   const { error } = await supabaseClient.from('ordens_servico').delete().eq('id', osId);
   if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao excluir.'; return; }
@@ -2990,6 +3322,7 @@ async function avSalvarOrcamento() {
   if (!clienteId) {
     msg.className = 'msg erro';
     msg.textContent = 'Selecione um cliente cadastrado (aba Clientes) pra salvar o orçamento.';
+    marcarCampoInvalido(document.getElementById('avClienteSelect'));
     return;
   }
   const d = avGerarDados();
@@ -3016,8 +3349,12 @@ function avSalvarConfigDebounced() {
 async function avSalvarConfig() {
   const c = avCfg()._raw;
   const dadosEmpresa = empresaAtual.precos.dadosEmpresa || {};
-  empresaAtual.precos = { config: c, dadosEmpresa };
-  await supabaseClient.from('empresas').update({ precos: empresaAtual.precos }).eq('id', empresaAtual.id);
+  if (!navigator.onLine) { mostrarToast('Sem internet — os valores não foram salvos. Ajuste de novo com conexão.', 'erro'); return; }
+  const precosAnteriores = empresaAtual.precos;
+  const novosPrecos = { config: c, dadosEmpresa };
+  const { error } = await supabaseClient.from('empresas').update({ precos: novosPrecos }).eq('id', empresaAtual.id);
+  if (error) { mostrarToast('Erro ao salvar os valores. Tente novamente.', 'erro'); empresaAtual.precos = precosAnteriores; return; }
+  empresaAtual.precos = novosPrecos;
 }
 
 function ligarEventosAvulso() {
@@ -3069,7 +3406,7 @@ function ligarEventosAvulso() {
     if (c) document.getElementById('avClienteNome').value = c.nome;
     avMontarProposta();
   });
-  document.getElementById('avSalvarOrcamentoBtn').addEventListener('click', avSalvarOrcamento);
+  document.getElementById('avSalvarOrcamentoBtn').addEventListener('click', (e) => comCarregamento(e.currentTarget, avSalvarOrcamento));
   document.getElementById('avIrParaOSBtn').addEventListener('click', () => {
     if (!avOrcamentoSalvoId) return;
     osAbrirComContexto({ orcamentoId: avOrcamentoSalvoId });
@@ -3086,7 +3423,7 @@ function ligarEventosAvulso() {
     const blob = new Blob([html], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const win = window.open(url, '_blank');
-    if (!win) alert('O navegador bloqueou a nova aba. Permita pop-ups para este site e tente novamente.');
+    if (!win) mostrarToast('O navegador bloqueou a nova aba. Permita pop-ups para este site e tente novamente.', 'erro');
   });
   document.getElementById('avWhatsappBtn').addEventListener('click', () => {
     const ta = document.getElementById('avWhatsappText');
@@ -3370,8 +3707,12 @@ function ctSalvarConfigDebounced() {
   clearTimeout(ctSalvarConfigTimeout);
   ctSalvarConfigTimeout = setTimeout(async () => {
     const c = ctCfg();
-    empresaAtual.precos = Object.assign({}, empresaAtual.precos, { pmoc: c });
-    await supabaseClient.from('empresas').update({ precos: empresaAtual.precos }).eq('id', empresaAtual.id);
+    if (!navigator.onLine) { mostrarToast('Sem internet — os valores não foram salvos. Ajuste de novo com conexão.', 'erro'); return; }
+    const precosAnteriores = empresaAtual.precos;
+    const novosPrecos = Object.assign({}, empresaAtual.precos, { pmoc: c });
+    const { error } = await supabaseClient.from('empresas').update({ precos: novosPrecos }).eq('id', empresaAtual.id);
+    if (error) { mostrarToast('Erro ao salvar os valores. Tente novamente.', 'erro'); empresaAtual.precos = precosAnteriores; return; }
+    empresaAtual.precos = novosPrecos;
   }, 800);
 }
 
@@ -3447,7 +3788,7 @@ function ligarEventosContrato() {
     try { navigator.clipboard.writeText(ta.value); } catch (e) { try { document.execCommand('copy'); } catch (e2) {} }
   });
 
-  document.getElementById('ctSalvarBtn').addEventListener('click', ctSalvarContrato);
+  document.getElementById('ctSalvarBtn').addEventListener('click', (e) => comCarregamento(e.currentTarget, ctSalvarContrato));
   document.getElementById('ctGerarContratoBtn').addEventListener('click', ctMontarContrato);
   document.getElementById('ctVoltarContratoBtn').addEventListener('click', () => {
     document.getElementById('ctContratoView').classList.add('hidden');
@@ -3497,7 +3838,7 @@ function ctMontarProposta() {
 async function ctSalvarContrato() {
   const msg = document.getElementById('ctSalvarMsg');
   const clienteId = document.getElementById('ctClienteSelect').value;
-  if (!clienteId) { msg.className = 'msg erro'; msg.textContent = 'Selecione um cliente cadastrado (aba Clientes) pra salvar o contrato.'; return; }
+  if (!clienteId) { msg.className = 'msg erro'; msg.textContent = 'Selecione um cliente cadastrado (aba Clientes) pra salvar o contrato.'; marcarCampoInvalido(document.getElementById('ctClienteSelect')); return; }
   const c = ctCfg();
   const totalEquip = ctEquipamentos.reduce((s, e) => s + ctCalcularItem(e, c), 0);
   const km = parseFloat(document.getElementById('ctDistanciaKm').value) || 0;
