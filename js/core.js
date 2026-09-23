@@ -1,3 +1,4 @@
+import { PLANO_PRECOS } from './config.js';
 
 const SUPABASE_URL = "https://lkankciqsldutuncuvyl.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_QAzF6HlUkYoAumTQCzKuVg_FEmhtwQ8";
@@ -209,6 +210,40 @@ function temAcessoCompleto() {
   return empresaAtual.plano === 'completo' && empresaAtual.assinatura_status === 'ativa';
 }
 
+function precisaEscolherPlano() {
+  if (!empresaAtual) return false;
+  if (empresaAtual.cortesia) return false;
+  if (trialCompletoAtivo()) return false;
+  if (empresaAtual.plano !== 'gratis' && empresaAtual.assinatura_status === 'ativa') return false;
+  return true;
+}
+
+function atualizarPrecosGate() {
+  const cicloEl = document.getElementById('assinaturaCiclo');
+  if (!cicloEl) return;
+  const ciclo = cicloEl.value;
+  const b = document.getElementById('gatePrecoBasico');
+  const c = document.getElementById('gatePrecoCompleto');
+  if (b) b.textContent = ciclo === 'anual' ? `R$ ${PLANO_PRECOS.basico.anual.toFixed(2).replace('.', ',')}` : `R$ ${PLANO_PRECOS.basico.mensal.toFixed(2).replace('.', ',')}`;
+  if (c) c.textContent = ciclo === 'anual' ? `R$ ${PLANO_PRECOS.completo.anual.toFixed(2).replace('.', ',')}` : `R$ ${PLANO_PRECOS.completo.mensal.toFixed(2).replace('.', ',')}`;
+}
+
+function mostrarGatePlano() {
+  const gate = document.getElementById('gatePlano');
+  const shell = document.getElementById('appShell');
+  if (!gate) return;
+  gate.style.display = 'block';
+  if (shell) shell.style.display = 'none';
+  atualizarPrecosGate();
+  if (!gate.dataset.wired) {
+    gate.dataset.wired = '1';
+    document.getElementById('assinaturaCiclo').addEventListener('change', atualizarPrecosGate);
+    document.getElementById('gateBtnBasico').addEventListener('click', () => window.assinarPlano('basico'));
+    document.getElementById('gateBtnCompleto').addEventListener('click', () => window.assinarPlano('completo'));
+    document.getElementById('gateSair').addEventListener('click', sair);
+  }
+}
+
 function trialCompletoAtivo() {
   return !!(empresaAtual && empresaAtual.trial_completo_expira_em && new Date(empresaAtual.trial_completo_expira_em) > new Date());
 }
@@ -327,8 +362,9 @@ async function iniciar() {
 
     empresaAtual = empresa;
     offlineCacheSalvar('sessao_identidade', { modoFuncionario: false, funcionarioNome: null, empresaAtual });
+    if (precisaEscolherPlano()) { mostrarGatePlano(); return; }
     document.getElementById("nomeEmpresa").textContent = empresaAtual.nome_empresa;
-    document.getElementById("badgePlano").textContent = { completo: "Plano Completo", basico: "Plano Básico" }[planoEfetivo()] || "Plano Grátis";
+    document.getElementById("badgePlano").textContent = { completo: "Plano Completo", basico: "Plano Essencial" }[planoEfetivo()] || "Plano Grátis";
     offlineAtualizarIndicador();
     offlineSincronizar();
     mostrarAba("inicio");
@@ -342,7 +378,7 @@ async function iniciar() {
         iniciarModoFuncionario();
       } else {
         document.getElementById("nomeEmpresa").textContent = empresaAtual.nome_empresa;
-        document.getElementById("badgePlano").textContent = { completo: "Plano Completo", basico: "Plano Básico" }[planoEfetivo()] || "Plano Grátis";
+        document.getElementById("badgePlano").textContent = { completo: "Plano Completo", basico: "Plano Essencial" }[planoEfetivo()] || "Plano Grátis";
         offlineAtualizarIndicador();
         mostrarAba("inicio");
       }
@@ -1632,7 +1668,7 @@ function planoEfetivo() {
   if (empresaAtual.cortesia) return 'completo';
   const plano = empresaAtual.plano || 'gratis';
   if (plano === 'gratis') return 'gratis';
-  // Sem assinatura ativa (pendente/atrasada/cancelada), o acesso cai pro Básico
+  // Sem assinatura ativa (pendente/atrasada/cancelada), o acesso cai pro Essencial
   return empresaAtual.assinatura_status === 'ativa' ? plano : 'basico';
 }
 
@@ -1648,7 +1684,7 @@ function atualizarAvisoLimiteClientes() {
     avisoEl.innerHTML = `
       <div class="card" style="border-color:var(--erro); background:#fef2f2;">
         <b style="color:#b91c1c;">Limite do plano grátis atingido (${LIMITE_CLIENTES_GRATIS} clientes)</b>
-        <p class="note" style="margin-top:6px;">Pra cadastrar novos clientes, assine o Básico ou o Completo.</p>
+        <p class="note" style="margin-top:6px;">Pra cadastrar novos clientes, assine o Essencial ou o Completo.</p>
         <button class="btn" onclick="mostrarAba('config')">Ver planos</button>
       </div>`;
     if (formBtn) formBtn.classList.add('hidden');
@@ -1656,7 +1692,7 @@ function atualizarAvisoLimiteClientes() {
     avisoEl.innerHTML = `
       <div class="card" style="border-color:var(--ambar); background:#fffbeb;">
         <b style="color:var(--ambar-escuro);">Você já tem ${total} de ${LIMITE_CLIENTES_GRATIS} clientes do plano grátis</b>
-        <p class="note" style="margin-top:6px;">Quando atingir o limite, não vai dar pra cadastrar clientes novos. Que tal assinar o Básico ou o Completo?</p>
+        <p class="note" style="margin-top:6px;">Quando atingir o limite, não vai dar pra cadastrar clientes novos. Que tal assinar o Essencial ou o Completo?</p>
         <button class="btn btn-secundario" onclick="mostrarAba('config')">Ver planos</button>
       </div>`;
     if (formBtn) formBtn.classList.remove('hidden');
@@ -1971,7 +2007,7 @@ async function clSalvarNovo() {
   if (!nome) { msg.className = 'msg erro'; msg.textContent = 'Digite o nome do cliente.'; marcarCampoInvalido(document.getElementById('clNome')); return; }
   if (planoEfetivo() === 'gratis' && clientesCache.length >= LIMITE_CLIENTES_GRATIS) {
     msg.className = 'msg erro';
-    msg.textContent = `O plano grátis permite até ${LIMITE_CLIENTES_GRATIS} clientes. Assine o Básico ou o Completo pra continuar cadastrando.`;
+    msg.textContent = `O plano grátis permite até ${LIMITE_CLIENTES_GRATIS} clientes. Assine o Essencial ou o Completo pra continuar cadastrando.`;
     return;
   }
   const { error } = await supabaseClient.from('clientes').insert({

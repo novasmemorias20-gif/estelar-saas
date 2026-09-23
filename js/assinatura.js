@@ -23,20 +23,20 @@ export function renderStatusAssinatura(){
   const statusAtual = empresaAtual.assinatura_status || 'trial';
   const statusLabel = ASSINATURA_STATUS_LABEL[statusAtual] || statusAtual;
   const corStatus = statusAtual === 'ativa' ? 'concluido' : (statusAtual === 'atrasada' || statusAtual === 'cancelada' ? 'cancelado' : 'agendado');
-  const nomePlanoAtual = { completo: 'Plano Completo', basico: 'Plano Básico' }[empresaAtual.plano] || 'Plano Grátis';
+  const nomePlanoAtual = { completo: 'Plano Completo', basico: 'Plano Essencial' }[empresaAtual.plano] || 'Sem plano';
   const trialAtivo = !!(empresaAtual.trial_completo_expira_em && new Date(empresaAtual.trial_completo_expira_em) > new Date());
   const diasTrial = trialAtivo ? Math.max(1, Math.ceil((new Date(empresaAtual.trial_completo_expira_em) - new Date()) / 86400000)) : 0;
   const trialElegivel = !trialAtivo && !empresaAtual.trial_completo_usado && empresaAtual.plano !== 'completo';
   const TABELA_PLANOS = [
-    { nome: 'Clientes', gratis: 'Até 10', basico: 'Ilimitado', completo: 'Ilimitado' },
-    { nome: 'Orçamentos', gratis: true, basico: true, completo: true },
-    { nome: 'Clientes e Agenda', gratis: true, basico: true, completo: true },
-    { nome: 'Ordens de Serviço', gratis: true, basico: true, completo: true },
-    { nome: 'Financeiro na Início', gratis: true, basico: true, completo: true },
-    { nome: 'Contratos de manutenção (PMOC)', gratis: false, basico: false, completo: true },
-    { nome: 'Cobrança PIX pro cliente', gratis: false, basico: false, completo: true },
-    { nome: 'Relatório de serviço em PDF', gratis: false, basico: false, completo: true },
-    { nome: 'Conta de ajudante (acesso limitado)', gratis: false, basico: false, completo: true },
+    { nome: 'Clientes e equipamentos', basico: true, completo: true },
+    { nome: 'Orçamentos profissionais', basico: true, completo: true },
+    { nome: 'Ordens de Serviço', basico: true, completo: true },
+    { nome: 'Agenda', basico: true, completo: true },
+    { nome: 'Financeiro e dashboard', basico: true, completo: true },
+    { nome: 'Contratos de manutenção (PMOC)', basico: false, completo: true },
+    { nome: 'Usuários e funcionários', basico: false, completo: true },
+    { nome: 'Relatório de serviço em PDF', basico: false, completo: true },
+    { nome: 'Cobrança PIX pro cliente', basico: false, completo: true },
   ];
   el.innerHTML = `
     <div style="margin-bottom:14px;">
@@ -55,8 +55,8 @@ export function renderStatusAssinatura(){
     ` : ''}
     <div style="overflow-x:auto; margin-bottom:16px;">
       <table style="width:100%; border-collapse:collapse; font-size:12px; min-width:420px;">
-        <thead><tr><th></th><th>Grátis</th><th>Básico</th><th>Completo</th></tr></thead>
-        <tbody>${TABELA_PLANOS.map(l=>`<tr><td style="padding:8px 6px; border-top:1px solid var(--borda);">${l.nome}</td><td style="text-align:center;">${celulaPlano(l.gratis)}</td><td style="text-align:center;">${celulaPlano(l.basico)}</td><td style="text-align:center;">${celulaPlano(l.completo)}</td></tr>`).join('')}</tbody>
+        <thead><tr><th></th><th>Essencial</th><th>Completo</th></tr></thead>
+        <tbody>${TABELA_PLANOS.map(l=>`<tr><td style="padding:8px 6px; border-top:1px solid var(--borda);">${l.nome}</td><td style="text-align:center;">${celulaPlano(l.basico)}</td><td style="text-align:center;">${celulaPlano(l.completo)}</td></tr>`).join('')}</tbody>
       </table>
     </div>
     <label>Ciclo de cobrança</label>
@@ -66,8 +66,8 @@ export function renderStatusAssinatura(){
     <label>CPF ou CNPJ (exigido pelo Asaas pra gerar a cobrança)</label>
     <input type="text" id="assinaturaCpfCnpj" placeholder="000.000.000-00" value="${esc((empresaAtual.precos.dadosEmpresa && empresaAtual.precos.dadosEmpresa.cnpj) || '')}">
     <div style="margin-top:14px; gap:10px; display:grid;">
-      <button class="btn btn-secundario" id="btnAssinarBasico"><b>Básico</b> — <span id="precoBasico">R$ 29,90/mês</span></button>
-      <button class="btn btn-ambar" id="btnAssinarCompleto"><b>Completo</b> — <span id="precoCompleto">R$ 79,90/mês</span></button>
+      <button class="btn btn-secundario" id="btnAssinarBasico"><b>Essencial</b> — <span id="precoBasico">R$ 39,90/mês</span></button>
+      <button class="btn btn-ambar" id="btnAssinarCompleto"><b>Completo</b> — <span id="precoCompleto">R$ 129,90/mês</span></button>
     </div>
     <div class="msg" id="msgAssinatura"></div>
   `;
