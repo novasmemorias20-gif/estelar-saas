@@ -416,9 +416,78 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
 .relatorio-thumb { position: relative; width: 72px; height: 72px; border-radius: 8px; overflow: hidden; border: 1px solid var(--cinza-linha); }
 .relatorio-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .relatorio-thumb button { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; border: none; background: rgba(15,23,42,.7); color: #fff; font-size: 12px; line-height: 1; cursor: pointer; }
+
+/* Tela de seleção de plano (gate de assinatura) */
+.gate-overlay { position: fixed; inset: 0; z-index: 999; background: linear-gradient(160deg, var(--azul-escuro), var(--azul)); overflow-y: auto; }
+.gate-wrap { max-width: 720px; margin: 0 auto; padding: 40px 20px 60px; }
+.gate-topo { text-align: center; margin-bottom: 28px; }
+.gate-topo img { width: 60px; height: 60px; border-radius: 16px; box-shadow: 0 10px 26px rgba(0,0,0,.3); margin-bottom: 14px; }
+.gate-topo h1 { color: #fff; font-family: "Manrope", sans-serif; font-weight: 800; font-size: 24px; margin: 0 0 8px; }
+.gate-topo p { color: rgba(255,255,255,.82); font-size: 14.5px; max-width: 480px; margin: 0 auto; line-height: 1.5; }
+.gate-card { background: var(--superficie); border-radius: 20px; padding: 24px 22px; box-shadow: 0 24px 60px rgba(0,0,0,.28); }
+.gate-planos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+@media (max-width: 560px) { .gate-planos { grid-template-columns: 1fr; } }
+.gate-plano { border: 1.5px solid var(--cinza-linha); border-radius: 14px; padding: 16px; position: relative; }
+.gate-plano.destaque { border-color: var(--ambar); background: var(--ambar-tinta); }
+.gate-plano .gate-plano-selo { position: absolute; top: -10px; right: 12px; background: var(--ambar); color: #fff; font-size: 10.5px; font-weight: 800; padding: 3px 9px; border-radius: 999px; text-transform: uppercase; letter-spacing: .03em; }
+.gate-plano h3 { margin: 0 0 2px; font-family: "Manrope", sans-serif; font-size: 16px; }
+.gate-plano .gate-preco { font-family: "Manrope", sans-serif; font-weight: 800; font-size: 22px; margin: 4px 0 10px; }
+.gate-plano .gate-preco small { font-size: 12px; font-weight: 600; color: var(--cinza-texto); }
+.gate-plano ul { list-style: none; padding: 0; margin: 0; font-size: 12.5px; color: var(--escuro); display: grid; gap: 6px; }
+.gate-plano li::before { content: "✓"; color: var(--sucesso); font-weight: 800; margin-right: 6px; }
+.gate-plano .btn { width: 100%; margin-top: 14px; }
+.gate-sair { text-align: center; margin-top: 16px; }
+.gate-sair a { color: rgba(255,255,255,.75); font-size: 12.5px; cursor: pointer; }
+.gate-sair a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
+
+<div class="gate-overlay" id="gatePlano" style="display:none;">
+  <div class="gate-wrap">
+    <div class="gate-topo">
+      <img src="icon-192.png" alt="Cosmos Clima">
+      <h1>Sua conta está pronta. Escolha seu plano pra começar.</h1>
+      <p>Orçamentos, clientes, agenda, ordens de serviço e financeiro organizados em um só lugar — sem planilha, sem WhatsApp perdido.</p>
+    </div>
+    <div class="gate-card">
+      <div class="gate-planos">
+        <div class="gate-plano">
+          <h3>Essencial</h3>
+          <div class="gate-preco"><span id="gatePrecoBasico">R$ 39,90</span><small>/mês</small></div>
+          <ul>
+            <li>Clientes e equipamentos ilimitados</li>
+            <li>Orçamentos profissionais</li>
+            <li>Ordens de serviço e agenda</li>
+            <li>Financeiro e dashboard</li>
+          </ul>
+          <button class="btn btn-secundario" id="gateBtnBasico">Assinar Essencial</button>
+        </div>
+        <div class="gate-plano destaque">
+          <span class="gate-plano-selo">Mais completo</span>
+          <h3>Completo</h3>
+          <div class="gate-preco"><span id="gatePrecoCompleto">R$ 129,90</span><small>/mês</small></div>
+          <ul>
+            <li>Tudo do Essencial</li>
+            <li>Contratos de manutenção (PMOC)</li>
+            <li>Usuários e funcionários</li>
+            <li>Relatório em PDF e cobrança PIX</li>
+          </ul>
+          <button class="btn btn-ambar" id="gateBtnCompleto">Assinar Completo</button>
+        </div>
+      </div>
+      <label>Ciclo de cobrança</label>
+      <select id="assinaturaCiclo"><option value="mensal">Mensal</option><option value="anual">Anual (2 meses grátis)</option></select>
+      <label>Forma de pagamento</label>
+      <select id="assinaturaMetodo"><option value="pix">PIX (cobrança recorrente por e-mail a cada ciclo)</option><option value="cartao">Cartão de crédito (cobrança automática)</option></select>
+      <label>CPF ou CNPJ (exigido pelo Asaas pra gerar a cobrança)</label>
+      <input type="text" id="assinaturaCpfCnpj" placeholder="000.000.000-00">
+      <div class="msg" id="msgAssinatura"></div>
+    </div>
+    <div class="gate-sair"><a id="gateSair">Sair da conta</a></div>
+  </div>
+</div>
+
 <div class="offline-indicador" id="offlineIndicador"></div>
 <div class="app-shell" id="appShell">
   <nav class="sidebar-desktop" id="sidebarDesktop">

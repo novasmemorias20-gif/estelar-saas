@@ -110,7 +110,7 @@ tr.linha-empresa:hover { background:var(--azul-tinta); }
     <label>Plano</label>
     <select id="editPlano">
       <option value="gratis">Grátis</option>
-      <option value="basico">Básico</option>
+      <option value="basico">Essencial</option>
       <option value="completo">Completo</option>
     </select>
 
@@ -208,7 +208,7 @@ async function carregarEmpresas(termo) {
     corpo.innerHTML = empresas.map(e => {
       const tagClasse = e.cortesia ? 'tag-ativa' : (e.plano === 'gratis' ? 'tag-gratis' : `tag-${e.assinatura_status || 'pendente'}`);
       const statusTexto = e.cortesia ? 'Cortesia' : (e.plano === 'gratis' ? '—' : (STATUS_LABEL[e.assinatura_status] || e.assinatura_status));
-      const nomePlano = { gratis: 'Grátis', basico: 'Básico', completo: 'Completo' }[e.plano] || e.plano;
+      const nomePlano = { gratis: 'Grátis', basico: 'Essencial', completo: 'Completo' }[e.plano] || e.plano;
       return `
         <tr class="linha-empresa" data-id="${e.id}">
           <td><b>${esc(e.nome_empresa)}</b></td>
