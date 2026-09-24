@@ -105,6 +105,11 @@ textarea { resize: vertical; min-height: 44px; }
 .btn-ambar { background: var(--ambar); color: #fff; box-shadow: 0 4px 14px rgba(242,115,74,.32); }
 .btn-ambar:hover { filter: brightness(1.04); box-shadow: 0 6px 18px rgba(242,115,74,.4); }
 
+/* Só na aba Início, os botões padrão voltam a ser azuis; as outras abas mantêm o âmbar */
+[data-aba-atual="inicio"] .btn:not(.btn-secundario):not(.btn-ambar) { background: var(--gradiente); box-shadow: 0 4px 14px rgba(11,95,165,.28); }
+[data-aba-atual="inicio"] .btn:not(.btn-secundario):not(.btn-ambar):hover { box-shadow: 0 6px 18px rgba(11,95,165,.36); }
+[data-aba-atual="inicio"] .atalho-primario { background: var(--gradiente); }
+
 .btn-perigo { background: var(--erro); box-shadow: 0 4px 14px rgba(220,38,38,.32); }
 .btn-perigo:hover { filter: brightness(1.06); box-shadow: 0 6px 18px rgba(220,38,38,.4); }
 
@@ -439,6 +444,23 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
 .gate-sair { text-align: center; margin-top: 16px; }
 .gate-sair a { color: rgba(255,255,255,.75); font-size: 12.5px; cursor: pointer; }
 .gate-sair a:hover { text-decoration: underline; }
+
+/* Tour guiado */
+.tour-widget {
+  position: fixed; left: 12px; right: 12px; bottom: calc(66px + env(safe-area-inset-bottom));
+  z-index: 60; background: var(--superficie); border-radius: 16px; padding: 14px 16px;
+  box-shadow: 0 12px 32px rgba(15,23,42,.18); border: 1px solid var(--cinza-linha);
+  max-width: 380px; margin: 0 auto;
+}
+body.modo-desktop .tour-widget { left: auto; right: 24px; bottom: 24px; margin: 0; }
+.tour-cabecalho { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; gap: 8px; }
+.tour-cabecalho span { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--azul-texto); }
+.tour-fechar { background: none; border: none; font-size: 20px; line-height: 1; color: var(--cinza-texto); cursor: pointer; padding: 0 2px; flex-shrink: 0; }
+.tour-titulo { font-family: "Manrope", sans-serif; font-weight: 800; font-size: 14.5px; margin-bottom: 4px; }
+.tour-desc { font-size: 12.5px; color: var(--cinza-texto); line-height: 1.4; margin-bottom: 10px; }
+.tour-btn { margin: 0 !important; }
+.tour-comemora { font-size: 13px; font-weight: 700; color: var(--sucesso); margin-bottom: 6px; }
+.onboarding-oferta-tour { display: flex; flex-direction: column; gap: 10px; background: var(--azul-tinta); border-radius: 12px; padding: 12px; margin: 12px 0 0; font-size: 13px; font-weight: 600; color: var(--azul-texto); }
 </style>
 </head>
 <body>
@@ -454,7 +476,7 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
       <div class="gate-planos">
         <div class="gate-plano">
           <h3>Essencial</h3>
-          <div class="gate-preco"><span id="gatePrecoBasico">R$ 39,90</span><small>/mês</small></div>
+          <div class="gate-preco"><span id="gatePrecoBasico">R$ 39,90</span><small id="gateCicloBasico">/mês</small></div>
           <ul>
             <li>Clientes e equipamentos ilimitados</li>
             <li>Orçamentos profissionais</li>
@@ -466,7 +488,7 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
         <div class="gate-plano destaque">
           <span class="gate-plano-selo">Mais completo</span>
           <h3>Completo</h3>
-          <div class="gate-preco"><span id="gatePrecoCompleto">R$ 129,90</span><small>/mês</small></div>
+          <div class="gate-preco"><span id="gatePrecoCompleto">R$ 129,90</span><small id="gateCicloCompleto">/mês</small></div>
           <ul>
             <li>Tudo do Essencial</li>
             <li>Contratos de manutenção (PMOC)</li>
@@ -489,6 +511,7 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
 </div>
 
 <div class="offline-indicador" id="offlineIndicador"></div>
+<div class="tour-widget" id="tourGuiado" style="display:none;"></div>
 <div class="app-shell" id="appShell">
   <nav class="sidebar-desktop" id="sidebarDesktop">
     <div class="sidebar-marca">
@@ -499,6 +522,10 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>
       <span>Início</span>
     </div>
+    <div class="tab sidebar-item" data-tab="clientes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span>Clientes</span>
+    </div>
     <div class="tab sidebar-item" data-tab="avulso">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/></svg>
       <span>Orçamento</span>
@@ -506,10 +533,6 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
     <div class="tab sidebar-item" data-tab="contrato">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
       <span>Contrato</span>
-    </div>
-    <div class="tab sidebar-item" data-tab="clientes">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      <span>Clientes</span>
     </div>
     <div class="tab sidebar-item" data-tab="agenda">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -542,6 +565,10 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>
       <span>Início</span>
     </div>
+    <div class="tab" data-tab="clientes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span>Clientes</span>
+    </div>
     <div class="tab" data-tab="avulso">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/></svg>
       <span>Orçamento</span>
@@ -549,10 +576,6 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
     <div class="tab" data-tab="contrato">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
       <span>Contrato</span>
-    </div>
-    <div class="tab" data-tab="clientes">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      <span>Clientes</span>
     </div>
     <div class="tab" data-tab="agenda">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
