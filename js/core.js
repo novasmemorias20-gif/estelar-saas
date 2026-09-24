@@ -222,10 +222,15 @@ function atualizarPrecosGate() {
   const cicloEl = document.getElementById('assinaturaCiclo');
   if (!cicloEl) return;
   const ciclo = cicloEl.value;
+  const sufixo = ciclo === 'anual' ? '/ano' : '/mês';
   const b = document.getElementById('gatePrecoBasico');
   const c = document.getElementById('gatePrecoCompleto');
+  const sufB = document.getElementById('gateCicloBasico');
+  const sufC = document.getElementById('gateCicloCompleto');
   if (b) b.textContent = ciclo === 'anual' ? `R$ ${PLANO_PRECOS.basico.anual.toFixed(2).replace('.', ',')}` : `R$ ${PLANO_PRECOS.basico.mensal.toFixed(2).replace('.', ',')}`;
   if (c) c.textContent = ciclo === 'anual' ? `R$ ${PLANO_PRECOS.completo.anual.toFixed(2).replace('.', ',')}` : `R$ ${PLANO_PRECOS.completo.mensal.toFixed(2).replace('.', ',')}`;
+  if (sufB) sufB.textContent = sufixo;
+  if (sufC) sufC.textContent = sufixo;
 }
 
 function mostrarGatePlano() {
@@ -594,6 +599,8 @@ document.querySelectorAll(".tab").forEach(tab => tab.addEventListener("click", (
 function mostrarAba(nome) {
   ativarTab(nome);
   const conteudo = document.getElementById("conteudo");
+  conteudo.dataset.abaAtual = nome;
+  renderTourWidget();
 
   if (nome === "inicio") { renderInicio(); }
   else if (nome === "avulso") { renderAvulso(); }
@@ -985,6 +992,7 @@ async function salvarDadosEmpresa() {
   empresaAtual.precos = novosPrecos;
   document.getElementById("nomeEmpresa").textContent = novoNome;
   msgEl.className = "msg ok"; msgEl.textContent = "Salvo!";
+  avancarTour('empresa');
 }
 
 /* ===================== INÍCIO (DASHBOARD) ===================== */
@@ -996,12 +1004,85 @@ const VERSAO_APP = '2026.09.22.2';
 const FINANCEIRO_OCULTO_KEY = 'estelar_financeiro_oculto';
 const ONBOARDING_COLAPSADO_KEY = 'estelar_onboarding_colapsado';
 
+/* ===================== TOUR GUIADO ===================== */
+const TOUR_ATIVO_KEY = 'estelar_tour_ativo';
+const TOUR_PASSO_KEY = 'estelar_tour_passo';
+const TOUR_OFERECIDO_KEY = 'estelar_tour_oferecido';
+// Textos espelham os mesmos 4 passos do checklist "Primeiros passos" (onboardingChecklistHtml).
+// A ordem/quantidade tem que bater com o array passosOnboarding em renderInicio().
+const TOUR_PASSOS = [
+  { chave: 'empresa', titulo: 'Complete os dados da sua empresa', descricao: 'Nome, telefone e endereço aparecem nos orçamentos e contratos enviados ao cliente.', aba: 'config' },
+  { chave: 'cliente', titulo: 'Cadastre seu primeiro cliente', descricao: 'É a partir dele que você gera orçamentos, contratos e agenda visitas.', aba: 'clientes' },
+  { chave: 'orcamento', titulo: 'Gere um orçamento ou contrato', descricao: 'Monte uma proposta e envie direto pelo WhatsApp ou em PDF.', aba: 'avulso' },
+  { chave: 'os', titulo: 'Crie sua primeira Ordem de Serviço', descricao: 'Acompanhe o serviço do agendamento até o pagamento.', aba: null }
+];
+
+function tourAtivo() { return localStorage.getItem(TOUR_ATIVO_KEY) === '1'; }
+function tourPassoAtual() { return parseInt(localStorage.getItem(TOUR_PASSO_KEY) || '0', 10); }
+
+function iniciarTourNoPasso(idx) {
+  localStorage.setItem(TOUR_ATIVO_KEY, '1');
+  localStorage.setItem(TOUR_PASSO_KEY, String(idx));
+  localStorage.setItem(TOUR_OFERECIDO_KEY, '1');
+  const passo = TOUR_PASSOS[idx];
+  if (passo) { if (passo.aba) mostrarAba(passo.aba); else irParaNovaOS(); }
+  renderTourWidget();
+}
+
+function pularTour() {
+  localStorage.setItem(TOUR_ATIVO_KEY, '0');
+  localStorage.setItem(TOUR_OFERECIDO_KEY, '1');
+  renderTourWidget();
+}
+
+function avancarTour(chave) {
+  if (!tourAtivo()) return;
+  const idx = tourPassoAtual();
+  const atual = TOUR_PASSOS[idx];
+  if (!atual || atual.chave !== chave) return;
+  const proximo = idx + 1;
+  localStorage.setItem(TOUR_PASSO_KEY, String(proximo));
+  renderTourWidget(true);
+  if (proximo >= TOUR_PASSOS.length) {
+    setTimeout(() => { localStorage.setItem(TOUR_ATIVO_KEY, '0'); renderTourWidget(); }, 4000);
+  }
+}
+
+function renderTourWidget(comemorar) {
+  const el = document.getElementById('tourGuiado');
+  if (!el) return;
+  if (!tourAtivo()) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const idx = tourPassoAtual();
+  if (idx >= TOUR_PASSOS.length) {
+    el.style.display = 'block';
+    el.innerHTML = `<div class="tour-comemora">🎉 Tour concluído! Seu Cosmos Clima já está pronto pra rodar de verdade.</div>`;
+    return;
+  }
+  const passo = TOUR_PASSOS[idx];
+  el.style.display = 'block';
+  el.innerHTML = `
+    <div class="tour-cabecalho">
+      <span>Tour guiado · Passo ${idx + 1} de ${TOUR_PASSOS.length}</span>
+      <button class="tour-fechar" id="tourFechar" title="Pular tour">×</button>
+    </div>
+    ${comemorar ? '<div class="tour-comemora">🎉 Boa! Passo concluído.</div>' : ''}
+    <div class="tour-titulo">${esc(passo.titulo)}</div>
+    <div class="tour-desc">${esc(passo.descricao)}</div>
+    <button class="btn tour-btn" id="tourIr">Ir até lá</button>
+  `;
+  document.getElementById('tourFechar').addEventListener('click', pularTour);
+  document.getElementById('tourIr').addEventListener('click', () => { if (passo.aba) mostrarAba(passo.aba); else irParaNovaOS(); });
+}
+
+
 function onboardingChecklistHtml(passos) {
   const total = passos.length;
   const feitos = passos.filter(p => p.feito).length;
   if (feitos >= total) return '';
   const colapsado = localStorage.getItem(ONBOARDING_COLAPSADO_KEY) === '1';
   const pct = Math.round((feitos / total) * 100);
+  const primeiroPendente = passos.findIndex(p => !p.feito);
+  const ofereceTour = feitos === 0 && localStorage.getItem(TOUR_OFERECIDO_KEY) !== '1' && !tourAtivo();
   return `
     <div class="card onboarding-card">
       <div class="onboarding-cabecalho" id="onboardingToggle">
@@ -1015,6 +1096,15 @@ function onboardingChecklistHtml(passos) {
         </div>
       </div>
       <div class="onboarding-progresso"><div class="onboarding-progresso-fill" style="width:${pct}%"></div></div>
+      ${ofereceTour ? `
+      <div class="onboarding-oferta-tour" id="onboardingOfertaTour">
+        <span>Quer um tour guiado rápido pelos primeiros passos?</span>
+        <div style="display:flex; gap:8px;">
+          <button class="btn tour-btn" id="btnAceitarTour" style="margin:0; width:auto; padding:8px 14px;">Sim, começar</button>
+          <button class="onboarding-btn" id="btnRecusarTour" style="margin:0;">Não, obrigado</button>
+        </div>
+      </div>` : `
+      <button class="onboarding-btn" id="btnFazerTourCompleto" style="margin:10px 0 0;">🎯 Fazer tour guiado</button>`}
       <div class="onboarding-lista ${colapsado ? 'hidden' : ''}" id="onboardingLista">
         ${passos.map((p, i) => `
           <div class="onboarding-item ${p.feito ? 'feito' : ''}">
@@ -1364,11 +1454,12 @@ async function renderInicio() {
     document.getElementById('onboardingLista').classList.toggle('hidden');
     document.querySelector('.onboarding-chevron').classList.toggle('colapsado');
   });
+  document.getElementById('btnAceitarTour')?.addEventListener('click', () => iniciarTourNoPasso(passosOnboarding.findIndex(p => !p.feito)));
+  document.getElementById('btnRecusarTour')?.addEventListener('click', () => { localStorage.setItem(TOUR_OFERECIDO_KEY, '1'); mostrarAba('inicio'); });
+  document.getElementById('btnFazerTourCompleto')?.addEventListener('click', () => iniciarTourNoPasso(passosOnboarding.findIndex(p => !p.feito)));
   conteudo.querySelectorAll('[data-onboarding-passo]').forEach(el => {
     el.addEventListener('click', () => {
-      const passo = passosOnboarding[parseInt(el.getAttribute('data-onboarding-passo'))];
-      if (passo.aba) mostrarAba(passo.aba);
-      else irParaNovaOS();
+      iniciarTourNoPasso(parseInt(el.getAttribute('data-onboarding-passo')));
     });
   });
 }
@@ -2023,6 +2114,7 @@ async function clSalvarNovo() {
   ['clNome','clTelefone','clEmail','clEndereco','clObs'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('clIntervalo').value = '';
   msg.className = 'msg ok'; msg.textContent = 'Cliente salvo!';
+  avancarTour('cliente');
   await clCarregarLista();
 }
 
@@ -3003,6 +3095,7 @@ async function osSalvar(osId) {
 
   let mensagemFinal = 'Salvo!';
   if (!osId) {
+    avancarTour('os');
     const dataHoraCriacao = document.getElementById('osDataHoraCriacao')?.value;
     if (dataHoraCriacao) {
       const { error: erroAgenda } = await osCriarCompromissoVinculado(novoId, dataHoraCriacao);
@@ -3380,6 +3473,7 @@ async function avSalvarOrcamento() {
   avOrcamentoSalvoId = data.id;
   msg.className = 'msg ok';
   msg.textContent = 'Orçamento salvo no histórico do cliente!';
+  avancarTour('orcamento');
   document.getElementById('avAgendarBox').classList.remove('hidden');
 }
 
@@ -3913,6 +4007,7 @@ async function ctSalvarContrato() {
   if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar contrato.'; return; }
   ctContratoSalvoId = data.id;
   msg.className = 'msg ok'; msg.textContent = 'Contrato salvo no histórico do cliente!';
+  avancarTour('orcamento');
 }
 
 function ctMontarContrato() {
