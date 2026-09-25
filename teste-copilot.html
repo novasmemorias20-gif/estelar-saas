@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teste Cosmos Copilot</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body { font-family: sans-serif; max-width: 480px; margin: 20px auto; padding: 0 16px; }
+  input, textarea, button { width: 100%; padding: 10px; margin: 6px 0; box-sizing: border-box; font-size: 16px; }
+  button { background: #0b5fa5; color: #fff; border: none; border-radius: 6px; }
+  #resposta { white-space: pre-wrap; background: #f2f2f2; padding: 10px; border-radius: 6px; margin-top: 10px; min-height: 40px; }
+  h3 { margin-top: 24px; }
+</style>
+</head>
+<body>
+
+<h2>Teste — Cosmos Copilot</h2>
+
+<div id="areaLogin">
+  <h3>1. Login</h3>
+  <input id="email" type="email" placeholder="seu e-mail">
+  <input id="senha" type="password" placeholder="sua senha">
+  <button onclick="fazerLogin()">Entrar</button>
+  <div id="statusLogin"></div>
+</div>
+
+<div id="areaChat" style="display:none">
+  <h3>2. Pergunte algo ao Copilot</h3>
+  <textarea id="mensagem" rows="3" placeholder="Ex: O que você pode fazer?"></textarea>
+  <button onclick="enviarMensagem()">Enviar</button>
+  <div id="resposta"></div>
+</div>
+
+<script>
+  const SUPABASE_URL = "https://lkankciqsldutuncuvyl.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_QAzF6HlUkYoAumTQCzKuVg_FEmhtwQ8";
+  const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  async function fazerLogin() {
+    const email = document.getElementById('email').value;
+    const senha = document.getElementById('senha').value;
+    document.getElementById('statusLogin').textContent = "Entrando...";
+    const { data, error } = await client.auth.signInWithPassword({ email, password: senha });
+    if (error) {
+      document.getElementById('statusLogin').textContent = "Erro: " + error.message;
+      return;
+    }
+    document.getElementById('statusLogin').textContent = "Login OK!";
+    document.getElementById('areaChat').style.display = 'block';
+  }
+
+  async function enviarMensagem() {
+    const mensagem = document.getElementById('mensagem').value;
+    document.getElementById('resposta').textContent = "Pensando...";
+    const { data: { session } } = await client.auth.getSession();
+    try {
+      const resp = await fetch(SUPABASE_URL + "/functions/v1/cosmos-copilot", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + session.access_token
+        },
+        body: JSON.stringify({ mensagem })
+      });
+      const dados = await resp.json();
+      document.getElementById('resposta').textContent = JSON.stringify(dados, null, 2);
+    } catch (e) {
+      document.getElementById('resposta').textContent = "Erro de conexão: " + e.message;
+    }
+  }
+</script>
+
+</body>
+</html>
