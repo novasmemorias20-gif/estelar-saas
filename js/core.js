@@ -3563,6 +3563,7 @@ function ligarEventosAvulso() {
   });
   document.getElementById('avWhatsappBtn').addEventListener('click', () => {
     const ta = document.getElementById('avWhatsappText');
+    ta.value = avGerarDados().whatsText;
     ta.classList.remove('hidden');
     ta.select();
     try { navigator.clipboard.writeText(ta.value); } catch (e) { try { document.execCommand('copy'); } catch (e2) {} }
