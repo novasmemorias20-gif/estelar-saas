@@ -1843,11 +1843,12 @@ async function clVerDetalhes(id) {
     document.querySelectorAll('#clLista [data-ver-cliente]').forEach(el => el.classList.toggle('selecionado', el.getAttribute('data-ver-cliente') === id));
   }
 
-  const [{ data: orcamentos }, { data: agendaItens }, { data: osItens }, { data: contratosItens }] = await Promise.all([
+  const [{ data: orcamentos }, { data: agendaItens }, { data: osItens }, { data: contratosItens }, { data: equipamentosItens }] = await Promise.all([
     supabaseClient.from('orcamentos').select('*').eq('cliente_id', id).order('created_at', { ascending: false }),
     supabaseClient.from('agenda').select('*').eq('cliente_id', id).order('data_hora', { ascending: false }),
     supabaseClient.from('ordens_servico').select('*').eq('cliente_id', id).order('created_at', { ascending: false }),
-    supabaseClient.from('contratos').select('*').eq('cliente_id', id).order('created_at', { ascending: false })
+    supabaseClient.from('contratos').select('*').eq('cliente_id', id).order('created_at', { ascending: false }),
+    supabaseClient.from('equipamentos').select('*').eq('cliente_id', id).order('created_at', { ascending: false })
   ]);
 
   const orcamentosHtml = (orcamentos && orcamentos.length)
@@ -1897,6 +1898,24 @@ async function clVerDetalhes(id) {
         </div>`).join('')
     : '<p class="vazio">Nenhum contrato registrado ainda.</p>';
 
+  const equipamentosHtml = (equipamentosItens && equipamentosItens.length)
+    ? equipamentosItens.map(eq => `
+        <div class="lista-item" style="cursor:pointer;" data-ver-equipamento="${eq.id}">
+          <div class="info">
+            <div class="titulo-item">${esc(eqTipoLabel(eq.tipo))}${eq.marca ? ' · ' + esc(eq.marca) : ''}${eq.modelo ? ' ' + esc(eq.modelo) : ''}</div>
+            <div class="sub-item">${[eq.capacidade_btu ? esc(eq.capacidade_btu) + ' BTU' : null, eq.local_instalacao ? esc(eq.local_instalacao) : null, eq.numero_serie ? 'Série ' + esc(eq.numero_serie) : null].filter(Boolean).join(' · ') || '—'}</div>
+            <span class="status-tag status-${eq.ativo ? 'concluido' : 'cancelado'}">${eq.ativo ? 'Ativo' : 'Inativo'}</span>
+          </div>
+          <div class="acoes">
+            <button class="icon-btn" data-toggle-equip="${eq.id}" data-ativo="${eq.ativo}" title="${eq.ativo ? 'Desativar' : 'Reativar'}">
+              ${eq.ativo
+                ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg>'
+                : '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'}
+            </button>
+          </div>
+        </div>`).join('')
+    : '<p class="vazio">Nenhum equipamento cadastrado ainda.</p>';
+
   conteudo.innerHTML = `
     <div class="card" id="clDadosCard">
       <div style="display:flex; justify-content:space-between; align-items:flex-start;">
@@ -1922,6 +1941,37 @@ async function clVerDetalhes(id) {
       </select>
       <div class="msg" id="clIntervaloMsg"></div>
       <div class="sub-item" id="clProximaVisita" style="margin-top:10px;"></div>
+    </div>
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3>Equipamentos</h3>
+        <button class="btn btn-secundario" id="eqAbrirFormBtn" style="width:auto; padding:6px 14px; font-size:13px; margin:0;">+ Novo equipamento</button>
+      </div>
+      <div class="hidden" id="eqFormCard" style="margin-top:14px;">
+        <label>Tipo</label>
+        <select id="eqTipo">${EQ_TIPOS.map(t => `<option value="${t.id}">${esc(t.label)}</option>`).join('')}</select>
+        <div class="grid2">
+          <div class="field"><label>Marca</label><input type="text" id="eqMarca" placeholder="Ex: LG, Springer..."></div>
+          <div class="field"><label>Modelo</label><input type="text" id="eqModelo" placeholder="Opcional"></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label>Capacidade (BTU)</label><input type="text" id="eqBtu" placeholder="Ex: 9000"></div>
+          <div class="field"><label>Local de instalação</label><input type="text" id="eqLocal" placeholder="Ex: Sala, Quarto 1..."></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label>Número de série</label><input type="text" id="eqSerie" placeholder="Opcional"></div>
+          <div class="field"><label>Número de patrimônio</label><input type="text" id="eqPatrimonio" placeholder="Opcional"></div>
+        </div>
+        <label>Data de instalação</label><input type="date" id="eqDataInstalacao">
+        <label>Observações</label><input type="text" id="eqObs" placeholder="Opcional">
+        <div class="checkbox-row"><input type="checkbox" id="eqAtivo" checked><label>Equipamento ativo</label></div>
+        <div class="msg" id="eqMsg"></div>
+        <div class="action-row">
+          <button class="btn" id="eqSalvarBtn">Salvar equipamento</button>
+          <button class="btn btn-secundario" id="eqCancelarFormBtn">Cancelar</button>
+        </div>
+      </div>
+      <div id="eqLista" style="margin-top:12px;">${equipamentosHtml}</div>
     </div>
     <div class="card">
       <h3>Orçamentos</h3>
@@ -1954,6 +2004,27 @@ async function clVerDetalhes(id) {
   });
   conteudo.querySelectorAll('[data-del-contrato]').forEach(el => {
     el.addEventListener('click', (e) => comCarregamento(e.currentTarget, () => ctExcluirContrato(el.getAttribute('data-del-contrato'), id), ''));
+  });
+
+  document.getElementById('eqAbrirFormBtn').addEventListener('click', () => {
+    document.getElementById('eqFormCard').classList.remove('hidden');
+    document.getElementById('eqAbrirFormBtn').classList.add('hidden');
+    document.getElementById('eqTipo').focus();
+  });
+  document.getElementById('eqCancelarFormBtn').addEventListener('click', () => clVerDetalhes(id));
+  document.getElementById('eqSalvarBtn').addEventListener('click', (e) => comCarregamento(e.currentTarget, () => eqSalvarNovo(id)));
+  conteudo.querySelectorAll('[data-ver-equipamento]').forEach(item => {
+    item.addEventListener('click', (e) => {
+      if (e.target.closest('[data-toggle-equip]')) return;
+      eqVerDetalhes(item.getAttribute('data-ver-equipamento'));
+    });
+  });
+  conteudo.querySelectorAll('[data-toggle-equip]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await eqToggleAtivo(btn.getAttribute('data-toggle-equip'), btn.getAttribute('data-ativo') === 'true');
+      await clVerDetalhes(id);
+    });
   });
 
   const selIntervalo = document.getElementById('clIntervaloEdit');
@@ -2129,6 +2200,222 @@ async function clExcluir(id) {
   if (error) { mostrarToast('Erro ao excluir cliente.', 'erro'); return; }
   (agendaDoCliente || []).forEach(a => sincronizarGoogleCalendar({ acao: 'excluir', empresaId: empresaAtual.id, googleEventId: a.google_event_id }));
   await clCarregarLista();
+}
+
+/* ===================== EQUIPAMENTOS (cadastro do cliente + histórico) ===================== */
+
+const EQ_TIPOS = [
+  { id: 'split', label: 'Split Hi-Wall' },
+  { id: 'cassete', label: 'Cassete' },
+  { id: 'pisoteto', label: 'Piso Teto' },
+  { id: 'multi', label: 'Multi-Split (por evap.)' },
+  { id: 'vrf', label: 'VRF/VRV' },
+  { id: 'janela', label: 'Janela/Portátil' },
+  { id: 'outro', label: 'Outro' }
+];
+
+function eqTipoLabel(t) {
+  const item = EQ_TIPOS.find(x => x.id === t);
+  return item ? item.label : (t || '—');
+}
+
+const EQ_HIST_TIPOS = [
+  { id: 'instalacao', label: 'Instalação' },
+  { id: 'manutencao_preventiva', label: 'Manutenção preventiva' },
+  { id: 'manutencao_corretiva', label: 'Manutenção corretiva' },
+  { id: 'higienizacao', label: 'Higienização' },
+  { id: 'reparo', label: 'Reparo/Conserto' },
+  { id: 'outro', label: 'Outro' }
+];
+
+function eqHistTipoLabel(t) {
+  const item = EQ_HIST_TIPOS.find(x => x.id === t);
+  return item ? item.label : (t || '—');
+}
+
+async function eqSalvarNovo(clienteId) {
+  const msg = document.getElementById('eqMsg');
+  const { error } = await supabaseClient.from('equipamentos').insert({
+    empresa_id: empresaAtual.id,
+    cliente_id: clienteId,
+    tipo: document.getElementById('eqTipo').value,
+    marca: document.getElementById('eqMarca').value.trim(),
+    modelo: document.getElementById('eqModelo').value.trim(),
+    capacidade_btu: document.getElementById('eqBtu').value.trim(),
+    numero_serie: document.getElementById('eqSerie').value.trim(),
+    numero_patrimonio: document.getElementById('eqPatrimonio').value.trim(),
+    local_instalacao: document.getElementById('eqLocal').value.trim(),
+    data_instalacao: document.getElementById('eqDataInstalacao').value || null,
+    observacoes: document.getElementById('eqObs').value.trim(),
+    ativo: document.getElementById('eqAtivo').checked
+  });
+  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar equipamento.'; return; }
+  msg.className = 'msg ok'; msg.textContent = 'Equipamento salvo!';
+  await clVerDetalhes(clienteId);
+}
+
+async function eqToggleAtivo(equipamentoId, ativoAtual) {
+  await supabaseClient.from('equipamentos').update({ ativo: !ativoAtual }).eq('id', equipamentoId);
+}
+
+async function eqVerDetalhes(equipamentoId) {
+  const conteudo = document.getElementById("conteudo");
+  conteudo.innerHTML = '<div class="card"><p class="vazio">Carregando...</p></div>';
+  const [{ data: eq, error }, { data: historico }] = await Promise.all([
+    supabaseClient.from('equipamentos').select('*').eq('id', equipamentoId).single(),
+    supabaseClient.from('equipamento_historico').select('*').eq('equipamento_id', equipamentoId).order('data_servico', { ascending: false })
+  ]);
+  if (error || !eq) { conteudo.innerHTML = '<div class="card"><p class="msg erro">Não foi possível carregar o equipamento.</p></div>'; return; }
+  eqRenderDetalhe(eq, historico || []);
+}
+
+function eqRenderDetalhe(eq, historico) {
+  const conteudo = document.getElementById("conteudo");
+  const historicoHtml = historico.length
+    ? historico.map(h => `
+        <div class="lista-item">
+          <div class="info">
+            <div class="titulo-item">${esc(eqHistTipoLabel(h.tipo_servico))} · ${h.data_servico ? new Date(h.data_servico).toLocaleDateString('pt-BR') : '—'}</div>
+            ${h.descricao ? `<div class="sub-item">${esc(h.descricao)}</div>` : ''}
+            ${h.responsavel_tecnico ? `<div class="sub-item">Responsável: ${esc(h.responsavel_tecnico)}</div>` : ''}
+            ${h.proxima_manutencao ? `<div class="sub-item">Próxima manutenção: ${new Date(h.proxima_manutencao).toLocaleDateString('pt-BR')}</div>` : ''}
+            ${h.observacoes ? `<div class="sub-item">${esc(h.observacoes)}</div>` : ''}
+            ${h.ordem_servico_id ? `<div class="sub-item" style="cursor:pointer; color:var(--azul);" data-abrir-os-hist="${h.ordem_servico_id}">Ver Ordem de Serviço vinculada →</div>` : ''}
+          </div>
+        </div>`).join('')
+    : '<p class="vazio">Nenhum registro de histórico ainda.</p>';
+
+  conteudo.innerHTML = `
+    <div class="card" id="eqDadosCard">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+        <div style="flex:1;">
+          <h3>${esc(eqTipoLabel(eq.tipo))}</h3>
+          <div class="sub-item">${esc([eq.marca, eq.modelo].filter(Boolean).join(' ') || '—')}</div>
+          <div class="sub-item">${[eq.capacidade_btu ? esc(eq.capacidade_btu) + ' BTU' : null, eq.local_instalacao ? esc(eq.local_instalacao) : null].filter(Boolean).join(' · ') || ''}</div>
+          ${eq.numero_serie ? `<div class="sub-item">Série: ${esc(eq.numero_serie)}</div>` : ''}
+          ${eq.numero_patrimonio ? `<div class="sub-item">Patrimônio: ${esc(eq.numero_patrimonio)}</div>` : ''}
+          ${eq.data_instalacao ? `<div class="sub-item">Instalado em: ${new Date(eq.data_instalacao).toLocaleDateString('pt-BR')}</div>` : ''}
+          ${eq.observacoes ? `<div class="sub-item" style="margin-top:6px;">${esc(eq.observacoes)}</div>` : ''}
+          <span class="status-tag status-${eq.ativo ? 'concluido' : 'cancelado'}" style="margin-top:8px; display:inline-block;">${eq.ativo ? 'Ativo' : 'Inativo'}</span>
+        </div>
+        <button class="icon-btn" id="eqEditarBtn" title="Editar equipamento">✎</button>
+      </div>
+      <div class="action-row">
+        <button class="btn btn-secundario" id="eqToggleAtivoBtn">${eq.ativo ? 'Marcar como inativo' : 'Reativar equipamento'}</button>
+      </div>
+    </div>
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3>Histórico de serviços</h3>
+        <button class="btn btn-secundario" id="eqHistAbrirFormBtn" style="width:auto; padding:6px 14px; font-size:13px; margin:0;">+ Adicionar</button>
+      </div>
+      <div class="hidden" id="eqHistFormCard" style="margin-top:14px;">
+        <label>Data do serviço</label>
+        <input type="date" id="eqHistData" value="${new Date().toISOString().slice(0, 10)}">
+        <label>Tipo de serviço</label>
+        <select id="eqHistTipo">${EQ_HIST_TIPOS.map(t => `<option value="${t.id}">${esc(t.label)}</option>`).join('')}</select>
+        <label>Descrição</label><input type="text" id="eqHistDescricao" placeholder="O que foi feito">
+        <label>Responsável técnico</label><input type="text" id="eqHistResponsavel" placeholder="Opcional">
+        <label>Próxima manutenção</label><input type="date" id="eqHistProxima">
+        <label>Observações</label><input type="text" id="eqHistObs" placeholder="Opcional">
+        <div class="msg" id="eqHistMsg"></div>
+        <div class="action-row">
+          <button class="btn" id="eqHistSalvarBtn">Salvar registro</button>
+          <button class="btn btn-secundario" id="eqHistCancelarBtn">Cancelar</button>
+        </div>
+      </div>
+      <div style="margin-top:12px;">${historicoHtml}</div>
+    </div>
+    <div class="voltar-link" id="eqVoltarBtn">← Voltar para o cliente</div>
+  `;
+
+  document.getElementById('eqVoltarBtn').addEventListener('click', () => clVerDetalhes(eq.cliente_id));
+  document.getElementById('eqEditarBtn').addEventListener('click', () => eqMostrarEdicao(eq));
+  document.getElementById('eqToggleAtivoBtn').addEventListener('click', (e) => comCarregamento(e.currentTarget, async () => {
+    await eqToggleAtivo(eq.id, eq.ativo);
+    await eqVerDetalhes(eq.id);
+  }, ''));
+  document.getElementById('eqHistAbrirFormBtn').addEventListener('click', () => {
+    document.getElementById('eqHistFormCard').classList.remove('hidden');
+    document.getElementById('eqHistAbrirFormBtn').classList.add('hidden');
+  });
+  document.getElementById('eqHistCancelarBtn').addEventListener('click', () => eqVerDetalhes(eq.id));
+  document.getElementById('eqHistSalvarBtn').addEventListener('click', (e) => comCarregamento(e.currentTarget, () => eqHistSalvar(eq.id)));
+  conteudo.querySelectorAll('[data-abrir-os-hist]').forEach(el => {
+    el.addEventListener('click', () => osAbrirComContexto({ osId: el.getAttribute('data-abrir-os-hist') }));
+  });
+}
+
+function eqMostrarEdicao(eq) {
+  const card = document.getElementById('eqDadosCard');
+  card.innerHTML = `
+    <h3>Editar equipamento</h3>
+    <label>Tipo</label>
+    <select id="eqEditTipo">${EQ_TIPOS.map(t => `<option value="${t.id}" ${eq.tipo === t.id ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}</select>
+    <div class="grid2">
+      <div class="field"><label>Marca</label><input type="text" id="eqEditMarca" value="${esc(eq.marca || '')}"></div>
+      <div class="field"><label>Modelo</label><input type="text" id="eqEditModelo" value="${esc(eq.modelo || '')}"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Capacidade (BTU)</label><input type="text" id="eqEditBtu" value="${esc(eq.capacidade_btu || '')}"></div>
+      <div class="field"><label>Local de instalação</label><input type="text" id="eqEditLocal" value="${esc(eq.local_instalacao || '')}"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Número de série</label><input type="text" id="eqEditSerie" value="${esc(eq.numero_serie || '')}"></div>
+      <div class="field"><label>Número de patrimônio</label><input type="text" id="eqEditPatrimonio" value="${esc(eq.numero_patrimonio || '')}"></div>
+    </div>
+    <label>Data de instalação</label><input type="date" id="eqEditDataInstalacao" value="${eq.data_instalacao || ''}">
+    <label>Observações</label><input type="text" id="eqEditObs" value="${esc(eq.observacoes || '')}">
+    <div class="checkbox-row"><input type="checkbox" id="eqEditAtivo" ${eq.ativo ? 'checked' : ''}><label>Equipamento ativo</label></div>
+    <div class="msg" id="eqEditMsg"></div>
+    <div class="action-row">
+      <button class="btn" id="eqEditSalvarBtn">Salvar</button>
+      <button class="btn btn-secundario" id="eqEditCancelarBtn">Cancelar</button>
+    </div>
+  `;
+  document.getElementById('eqEditSalvarBtn').addEventListener('click', (e) => comCarregamento(e.currentTarget, () => eqSalvarEdicao(eq.id)));
+  document.getElementById('eqEditCancelarBtn').addEventListener('click', () => eqVerDetalhes(eq.id));
+}
+
+async function eqSalvarEdicao(id) {
+  const msg = document.getElementById('eqEditMsg');
+  const { error } = await supabaseClient.from('equipamentos').update({
+    tipo: document.getElementById('eqEditTipo').value,
+    marca: document.getElementById('eqEditMarca').value.trim(),
+    modelo: document.getElementById('eqEditModelo').value.trim(),
+    capacidade_btu: document.getElementById('eqEditBtu').value.trim(),
+    numero_serie: document.getElementById('eqEditSerie').value.trim(),
+    numero_patrimonio: document.getElementById('eqEditPatrimonio').value.trim(),
+    local_instalacao: document.getElementById('eqEditLocal').value.trim(),
+    data_instalacao: document.getElementById('eqEditDataInstalacao').value || null,
+    observacoes: document.getElementById('eqEditObs').value.trim(),
+    ativo: document.getElementById('eqEditAtivo').checked,
+    updated_at: new Date().toISOString()
+  }).eq('id', id);
+  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar.'; return; }
+  await eqVerDetalhes(id);
+}
+
+// Nesta etapa a Ordem de Serviço do histórico é sempre nula (vínculo manual/automático com OS
+// fica para uma etapa posterior). O parâmetro já existe pronto pra receber um ordemServicoId no futuro.
+async function eqHistSalvar(equipamentoId, ordemServicoId) {
+  const msg = document.getElementById('eqHistMsg');
+  const dataServico = document.getElementById('eqHistData').value;
+  if (!dataServico) { msg.className = 'msg erro'; msg.textContent = 'Informe a data do serviço.'; marcarCampoInvalido(document.getElementById('eqHistData')); return; }
+  const { data: eq } = await supabaseClient.from('equipamentos').select('empresa_id').eq('id', equipamentoId).single();
+  const { error } = await supabaseClient.from('equipamento_historico').insert({
+    empresa_id: eq ? eq.empresa_id : empresaAtual.id,
+    equipamento_id: equipamentoId,
+    ordem_servico_id: ordemServicoId || null,
+    data_servico: dataServico,
+    tipo_servico: document.getElementById('eqHistTipo').value,
+    descricao: document.getElementById('eqHistDescricao').value.trim(),
+    responsavel_tecnico: document.getElementById('eqHistResponsavel').value.trim(),
+    proxima_manutencao: document.getElementById('eqHistProxima').value || null,
+    observacoes: document.getElementById('eqHistObs').value.trim()
+  });
+  if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar registro.'; return; }
+  await eqVerDetalhes(equipamentoId);
 }
 
 /* ===================== AGENDA (CALENDÁRIO + OS) ===================== */
@@ -4101,7 +4388,8 @@ try {
     osAbrirComContexto, clExcluir, renderAgenda, agSalvarNovo, agAtualizarStatus, agAtualizarDinamico, irParaKanbanOS,
     agRenderKanban, cpSalvar, cpExcluir, agRenderCalendario, agRenderDia, voltarDoOS, osCriarCompromissoVinculado,
     osConfirmarAgendamento, osSalvar, osExcluir, renderAvulso, avSalvarOrcamento, avSalvarConfig, novoItemAvulso,
-    renderContrato, ctSalvarContrato, ctExcluirContrato, ctNovoEquip, iniciarTrialCompleto };
+    renderContrato, ctSalvarContrato, ctExcluirContrato, ctNovoEquip, iniciarTrialCompleto,
+    eqSalvarNovo, eqToggleAtivo, eqVerDetalhes, eqMostrarEdicao, eqSalvarEdicao, eqHistSalvar };
   Object.entries(_expor).forEach(([k,v])=>{ if(typeof v==='function') window[k]=v; });
   window.empresaAtual = empresaAtual;
   // keep empresaAtual updated via getter
