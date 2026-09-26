@@ -461,6 +461,49 @@ body.modo-desktop .tour-widget { left: auto; right: 24px; bottom: 24px; margin: 
 .tour-btn { margin: 0 !important; }
 .tour-comemora { font-size: 13px; font-weight: 700; color: var(--sucesso); margin-bottom: 6px; }
 .onboarding-oferta-tour { display: flex; flex-direction: column; gap: 10px; background: var(--azul-tinta); border-radius: 12px; padding: 12px; margin: 12px 0 0; font-size: 13px; font-weight: 600; color: var(--azul-texto); }
+
+/* Cosmos Copilot — botão flutuante e painel de chat */
+.copilot-botao {
+  position: fixed; right: 16px; bottom: calc(78px + env(safe-area-inset-bottom));
+  z-index: 70; width: 56px; height: 56px; border-radius: 50%;
+  background: var(--gradiente); border: none; box-shadow: 0 10px 26px rgba(15,23,42,.28);
+  font-size: 24px; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: #fff;
+}
+body.modo-desktop .copilot-botao { bottom: 24px; }
+
+.copilot-painel {
+  position: fixed; left: 12px; right: 12px; bottom: calc(78px + env(safe-area-inset-bottom));
+  z-index: 71; background: var(--superficie); border-radius: 18px; border: 1px solid var(--cinza-linha);
+  box-shadow: 0 16px 40px rgba(15,23,42,.28); max-width: 380px; margin: 0 auto;
+  max-height: min(520px, 70vh); display: none; flex-direction: column; overflow: hidden;
+}
+.copilot-painel.aberto { display: flex; }
+body.modo-desktop .copilot-painel { left: auto; right: 24px; bottom: 92px; margin: 0; }
+
+.copilot-cabecalho {
+  background: var(--gradiente); color: #fff; padding: 14px 16px;
+  display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+}
+.copilot-cabecalho span { font-family: "Manrope", sans-serif; font-weight: 800; font-size: 14.5px; }
+.copilot-fechar { background: none; border: none; color: #fff; font-size: 20px; line-height: 1; cursor: pointer; padding: 0 2px; }
+
+.copilot-mensagens { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.copilot-msg { max-width: 85%; padding: 9px 13px; border-radius: 14px; font-size: 13.5px; line-height: 1.4; }
+.copilot-msg.usuario { align-self: flex-end; background: var(--azul-tinta); color: var(--azul-texto); border-bottom-right-radius: 4px; }
+.copilot-msg.ia { align-self: flex-start; background: var(--cinza-claro); border: 1px solid var(--cinza-linha); border-bottom-left-radius: 4px; }
+.copilot-msg.erro { align-self: center; background: transparent; color: var(--erro); font-size: 12.5px; }
+
+.copilot-rodape { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--cinza-linha); flex-shrink: 0; }
+.copilot-rodape textarea {
+  flex: 1; resize: none; border: 1px solid var(--cinza-linha); border-radius: 12px; padding: 9px 12px;
+  font-family: inherit; font-size: 13.5px; max-height: 80px; background: var(--cinza-claro); color: inherit;
+}
+.copilot-enviar {
+  background: var(--gradiente); color: #fff; border: none; border-radius: 12px; width: 40px; flex-shrink: 0;
+  font-size: 16px; cursor: pointer;
+}
+.copilot-enviar:disabled { opacity: .5; }
 </style>
 </head>
 <body>
@@ -592,7 +635,7 @@ body.modo-desktop .tour-widget { left: auto; right: 24px; bottom: 24px; margin: 
 
   </div>
 
-  <p class="marca-dagua">feito no Cosmos Clima <span class="marca-by">by Estelar</span></p>
+  <p class="marca-dagua">Cosmos Clima <span class="marca-by">by Estelar</span></p>
 </div>
   </div>
 </div>
