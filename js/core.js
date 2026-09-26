@@ -539,11 +539,11 @@ async function renderFuncOsDetalhe(osId) {
     ${relatorioFotosHtml()}
   `;
   document.getElementById('funcVoltarLista').addEventListener('click', renderFuncOsLista);
-  document.getElementById('funcSalvarStatusBtn').addEventListener('click', (e) => comCarregamento(e.currentTarget, () => funcSalvarStatus(os.id)));
+  document.getElementById('funcSalvarStatusBtn').addEventListener('click', (e) => comCarregamento(e.currentTarget, () => funcSalvarStatus(os.id, os)));
   ligarEventosRelatorio(os, cliente);
 }
 
-async function funcSalvarStatus(osId) {
+async function funcSalvarStatus(osId, osAtual) {
   const msg = document.getElementById('funcStatusMsg');
   const novoStatus = document.getElementById('funcOsStatus').value;
   if (!navigator.onLine) {
@@ -564,6 +564,18 @@ async function funcSalvarStatus(osId) {
   const { error } = await supabaseClient.rpc('funcionario_atualizar_status_os', { p_os_id: osId, p_novo_status: novoStatus });
   if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro: ' + error.message; return; }
   msg.className = 'msg ok'; msg.textContent = 'Status atualizado!';
+  if (novoStatus === 'concluida') {
+    // Mesma sincronização de histórico do fluxo do dono — os equipamentos já devem ter sido
+    // selecionados por ele antes; o funcionário só está mudando o status pra concluída.
+    const tipoServico = (osAtual && osAtual.contrato_id) ? 'manutencao_preventiva' : 'outro';
+    const { data: qtdHistorico, error: erroSync } = await supabaseClient.rpc('sincronizar_historico_equipamentos_os', {
+      p_os_id: osId,
+      p_tipo_servico: tipoServico,
+      p_descricao: osAtual ? osAtual.descricao : null
+    });
+    if (erroSync) console.warn('Erro ao sincronizar histórico de equipamentos:', erroSync);
+    else if (qtdHistorico > 0) mostrarToast(`Histórico registrado em ${qtdHistorico} equipamento(s).`, 'sucesso');
+  }
 }
 
 async function renderFuncAgenda() {
@@ -2418,6 +2430,25 @@ async function eqHistSalvar(equipamentoId, ordemServicoId) {
   await eqVerDetalhes(equipamentoId);
 }
 
+// Sincroniza quais equipamentos uma OS atende (tabela de ligação ordens_servico_equipamentos)
+// a partir da seleção atual de checkboxes na tela. Só mexe na ligação — nunca apaga um
+// registro de equipamento_historico já criado, mesmo que o equipamento seja desmarcado depois.
+async function eqOsSincronizarSelecao(osId, selecionados) {
+  const { data: atuais } = await supabaseClient.from('ordens_servico_equipamentos').select('id,equipamento_id').eq('ordem_servico_id', osId);
+  const atuaisArr = atuais || [];
+  const idsAtuais = atuaisArr.map(a => a.equipamento_id);
+  const paraInserir = selecionados.filter(id => !idsAtuais.includes(id));
+  const paraRemover = atuaisArr.filter(a => !selecionados.includes(a.equipamento_id)).map(a => a.id);
+  if (paraInserir.length) {
+    await supabaseClient.from('ordens_servico_equipamentos').insert(
+      paraInserir.map(equipamentoId => ({ empresa_id: empresaAtual.id, ordem_servico_id: osId, equipamento_id: equipamentoId }))
+    );
+  }
+  if (paraRemover.length) {
+    await supabaseClient.from('ordens_servico_equipamentos').delete().in('id', paraRemover);
+  }
+}
+
 /* ===================== AGENDA (CALENDÁRIO + OS) ===================== */
 
 let agModo = 'calendario';
@@ -2779,6 +2810,11 @@ async function agRenderOS(card) {
         const r = avCalcItem(it, cfg);
         return { titulo: d.titulo, detalhe: d.detalhe, valor: r.total };
       });
+      // Reaproveita o(s) tipo(s) de serviço já cadastrados no orçamento (instalação/manutenção/higienização)
+      // em vez de criar um vocabulário novo. Se os itens forem de tipos diferentes, cai em "outro".
+      const tiposBrutos = ((orc.dados && orc.dados.items) || []).map(it => it.tipo).filter(Boolean);
+      const tipoUnico = tiposBrutos.length && tiposBrutos.every(t => t === tiposBrutos[0]) ? tiposBrutos[0] : null;
+      osContexto._tipoServicoOrigem = { instalacao: 'instalacao', manutencao: 'manutencao_corretiva', higienizacao: 'higienizacao' }[tipoUnico] || 'outro';
       if (!osExistente) { const { data: os } = await supabaseClient.from('ordens_servico').select('*').eq('orcamento_id', osContexto.orcamentoId).maybeSingle(); osExistente = os; }
     }
   } else if (osContexto.contratoId) {
@@ -2787,6 +2823,7 @@ async function agRenderOS(card) {
       clienteInfo = ctr.clientes; clienteId = ctr.cliente_id;
       origemLabel = 'Contrato de manutenção';
       origemValor = ctr.valor_visita;
+      osContexto._tipoServicoOrigem = 'manutencao_preventiva'; // PMOC é manutenção programada
       const cfgP = Object.assign({}, CT_VALORES_PADRAO, (empresaAtual.precos.pmoc || {}));
       itensPreview = ((ctr.dados && ctr.dados.equipamentos) || []).map(e => {
         const d = ctItemDescricao(e);
@@ -2803,6 +2840,37 @@ async function agRenderOS(card) {
   }
   osContexto.clienteId = clienteId;
   osContexto.clienteNome = clienteInfo ? clienteInfo.nome : null;
+
+  let equipamentosOsHtml = '';
+  if (osExistente && clienteId) {
+    const [{ data: equipAtivos }, { data: vinculadosRows }] = await Promise.all([
+      supabaseClient.from('equipamentos').select('*').eq('cliente_id', clienteId).eq('ativo', true).order('created_at'),
+      supabaseClient.from('ordens_servico_equipamentos').select('equipamento_id').eq('ordem_servico_id', osExistente.id)
+    ]);
+    const idsVinculados = (vinculadosRows || []).map(v => v.equipamento_id);
+    let listaEquip = equipAtivos || [];
+    const idsJaListados = new Set(listaEquip.map(e => e.id));
+    // Um equipamento já vinculado que foi inativado depois continua aparecendo (marcado),
+    // pra não sumir da tela e "desvincular" sozinho sem o usuário pedir.
+    const idsInativosVinculados = idsVinculados.filter(vid => !idsJaListados.has(vid));
+    if (idsInativosVinculados.length) {
+      const { data: extras } = await supabaseClient.from('equipamentos').select('*').in('id', idsInativosVinculados);
+      listaEquip = listaEquip.concat(extras || []);
+    }
+    const itensCheckbox = listaEquip.length
+      ? listaEquip.map(eq => `
+          <div class="checkbox-row">
+            <input type="checkbox" id="osEquip_${eq.id}" data-eq-check="${eq.id}" ${idsVinculados.includes(eq.id) ? 'checked' : ''}>
+            <label for="osEquip_${eq.id}">${esc(eqTipoLabel(eq.tipo))}${eq.marca ? ' · ' + esc(eq.marca) : ''}${eq.modelo ? ' ' + esc(eq.modelo) : ''}${eq.capacidade_btu ? ' · ' + esc(eq.capacidade_btu) + ' BTU' : ''}${eq.local_instalacao ? ' · ' + esc(eq.local_instalacao) : ''}${!eq.ativo ? ' (inativo)' : ''}</label>
+          </div>`).join('')
+      : '<p class="vazio">Este cliente ainda não tem equipamento cadastrado.</p>';
+    equipamentosOsHtml = `
+      <div class="card">
+        <h3 style="font-size:15px;">Equipamentos atendidos</h3>
+        <p class="note" style="margin-top:-4px;">Marque os equipamentos que receberam serviço nesta OS. Quando a OS estiver Concluída, cada um marcado ganha um registro no histórico dele.</p>
+        ${itensCheckbox}
+      </div>`;
+  }
 
   const itensExibir = osExistente ? osExtrairItensParaExibir(osExistente.dados) : itensPreview;
   osContexto._itensSnapshot = itensExibir;
@@ -2840,6 +2908,7 @@ async function agRenderOS(card) {
       ${itensHtml}
       <div class="item-subtotal" style="margin-top:8px; padding-top:10px;"><span>Total orçado</span><b>${money(valorOrigem)}</b></div>
     </div>
+    ${equipamentosOsHtml}
     <div class="card">
       ${osExistente ? `<label>Status</label>
       <select id="osStatus">
@@ -3377,6 +3446,26 @@ async function osSalvar(osId) {
     if (data) novoId = data.id;
   }
   if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar OS: ' + (error.message || 'erro desconhecido'); console.error('Erro ao salvar OS:', error); return; }
+
+  if (osId) {
+    const checkboxesEquip = Array.from(document.querySelectorAll('[data-eq-check]'));
+    if (checkboxesEquip.length) {
+      const selecionados = checkboxesEquip.filter(c => c.checked).map(c => c.getAttribute('data-eq-check'));
+      await eqOsSincronizarSelecao(osId, selecionados);
+    }
+    if (payload.status === 'concluida') {
+      // Function segura no banco: confere no servidor que a OS e os equipamentos são da mesma
+      // empresa/cliente, e só cria histórico novo (nunca duplica) — ver auditoria da Etapa 3.
+      const { data: qtdHistorico, error: erroSync } = await supabaseClient.rpc('sincronizar_historico_equipamentos_os', {
+        p_os_id: osId,
+        p_tipo_servico: osContexto._tipoServicoOrigem || 'outro',
+        p_descricao: payload.descricao,
+        p_observacoes: payload.observacoes
+      });
+      if (erroSync) console.warn('Erro ao sincronizar histórico de equipamentos:', erroSync);
+      else if (qtdHistorico > 0) mostrarToast(`Histórico registrado em ${qtdHistorico} equipamento(s).`, 'sucesso');
+    }
+  }
 
   osContexto.osId = novoId;
 
@@ -4389,7 +4478,7 @@ try {
     agRenderKanban, cpSalvar, cpExcluir, agRenderCalendario, agRenderDia, voltarDoOS, osCriarCompromissoVinculado,
     osConfirmarAgendamento, osSalvar, osExcluir, renderAvulso, avSalvarOrcamento, avSalvarConfig, novoItemAvulso,
     renderContrato, ctSalvarContrato, ctExcluirContrato, ctNovoEquip, iniciarTrialCompleto,
-    eqSalvarNovo, eqToggleAtivo, eqVerDetalhes, eqMostrarEdicao, eqSalvarEdicao, eqHistSalvar };
+    eqSalvarNovo, eqToggleAtivo, eqVerDetalhes, eqMostrarEdicao, eqSalvarEdicao, eqHistSalvar, eqOsSincronizarSelecao };
   Object.entries(_expor).forEach(([k,v])=>{ if(typeof v==='function') window[k]=v; });
   window.empresaAtual = empresaAtual;
   // keep empresaAtual updated via getter
