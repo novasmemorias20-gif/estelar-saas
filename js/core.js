@@ -568,13 +568,18 @@ async function funcSalvarStatus(osId, osAtual) {
     // Mesma sincronização de histórico do fluxo do dono — os equipamentos já devem ter sido
     // selecionados por ele antes; o funcionário só está mudando o status pra concluída.
     const tipoServico = (osAtual && osAtual.contrato_id) ? 'manutencao_preventiva' : 'outro';
-    const { data: qtdHistorico, error: erroSync } = await supabaseClient.rpc('sincronizar_historico_equipamentos_os', {
+    const { data: resultadoSync, error: erroSync } = await supabaseClient.rpc('sincronizar_historico_equipamentos_os', {
       p_os_id: osId,
       p_tipo_servico: tipoServico,
       p_descricao: osAtual ? osAtual.descricao : null
     });
     if (erroSync) console.warn('Erro ao sincronizar histórico de equipamentos:', erroSync);
-    else if (qtdHistorico > 0) mostrarToast(`Histórico registrado em ${qtdHistorico} equipamento(s).`, 'sucesso');
+    else if (resultadoSync) {
+      const partes = [];
+      if (resultadoSync.equipamentos_criados > 0) partes.push(`${resultadoSync.equipamentos_criados} equipamento(s) cadastrado(s) automaticamente`);
+      if (resultadoSync.historico_criado > 0) partes.push(`histórico registrado em ${resultadoSync.historico_criado} equipamento(s)`);
+      if (partes.length) mostrarToast(partes.join(' · ') + '.', 'sucesso');
+    }
   }
 }
 
@@ -3455,15 +3460,21 @@ async function osSalvar(osId) {
     }
     if (payload.status === 'concluida') {
       // Function segura no banco: confere no servidor que a OS e os equipamentos são da mesma
-      // empresa/cliente, e só cria histórico novo (nunca duplica) — ver auditoria da Etapa 3.
-      const { data: qtdHistorico, error: erroSync } = await supabaseClient.rpc('sincronizar_historico_equipamentos_os', {
+      // empresa/cliente, cadastra equipamento novo se a origem for instalação, e só cria
+      // histórico novo (nunca duplica) — ver auditoria da Etapa 3.
+      const { data: resultadoSync, error: erroSync } = await supabaseClient.rpc('sincronizar_historico_equipamentos_os', {
         p_os_id: osId,
         p_tipo_servico: osContexto._tipoServicoOrigem || 'outro',
         p_descricao: payload.descricao,
         p_observacoes: payload.observacoes
       });
       if (erroSync) console.warn('Erro ao sincronizar histórico de equipamentos:', erroSync);
-      else if (qtdHistorico > 0) mostrarToast(`Histórico registrado em ${qtdHistorico} equipamento(s).`, 'sucesso');
+      else if (resultadoSync) {
+        const partes = [];
+        if (resultadoSync.equipamentos_criados > 0) partes.push(`${resultadoSync.equipamentos_criados} equipamento(s) cadastrado(s) automaticamente`);
+        if (resultadoSync.historico_criado > 0) partes.push(`histórico registrado em ${resultadoSync.historico_criado} equipamento(s)`);
+        if (partes.length) mostrarToast(partes.join(' · ') + '.', 'sucesso');
+      }
     }
   }
 
