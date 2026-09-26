@@ -2820,6 +2820,9 @@ async function agRenderOS(card) {
       const tiposBrutos = ((orc.dados && orc.dados.items) || []).map(it => it.tipo).filter(Boolean);
       const tipoUnico = tiposBrutos.length && tiposBrutos.every(t => t === tiposBrutos[0]) ? tiposBrutos[0] : null;
       osContexto._tipoServicoOrigem = { instalacao: 'instalacao', manutencao: 'manutencao_corretiva', higienizacao: 'higienizacao' }[tipoUnico] || 'outro';
+      // Instalação pura (só itens de instalação) já cria o equipamento sozinha ao concluir —
+      // não faz sentido mostrar seleção manual de equipamento nesse caso.
+      osContexto._instalacaoPura = tiposBrutos.length > 0 && tiposBrutos.every(t => t === 'instalacao');
       if (!osExistente) { const { data: os } = await supabaseClient.from('ordens_servico').select('*').eq('orcamento_id', osContexto.orcamentoId).maybeSingle(); osExistente = os; }
     }
   } else if (osContexto.contratoId) {
@@ -2829,6 +2832,7 @@ async function agRenderOS(card) {
       origemLabel = 'Contrato de manutenção';
       origemValor = ctr.valor_visita;
       osContexto._tipoServicoOrigem = 'manutencao_preventiva'; // PMOC é manutenção programada
+      osContexto._instalacaoPura = false; // contrato de manutenção nunca é instalação
       const cfgP = Object.assign({}, CT_VALORES_PADRAO, (empresaAtual.precos.pmoc || {}));
       itensPreview = ((ctr.dados && ctr.dados.equipamentos) || []).map(e => {
         const d = ctItemDescricao(e);
@@ -2847,7 +2851,14 @@ async function agRenderOS(card) {
   osContexto.clienteNome = clienteInfo ? clienteInfo.nome : null;
 
   let equipamentosOsHtml = '';
-  if (osExistente && clienteId) {
+  if (osExistente && clienteId && osContexto._instalacaoPura) {
+    // Instalação pura: nada pra selecionar aqui — o equipamento novo é criado sozinho ao concluir.
+    equipamentosOsHtml = `
+      <div class="card">
+        <h3 style="font-size:15px;">Equipamentos</h3>
+        <p class="note" style="margin-top:-4px;">Este serviço é de instalação — o equipamento novo é cadastrado automaticamente no cliente quando a OS for concluída.</p>
+      </div>`;
+  } else if (osExistente && clienteId) {
     const [{ data: equipAtivos }, { data: vinculadosRows }] = await Promise.all([
       supabaseClient.from('equipamentos').select('*').eq('cliente_id', clienteId).eq('ativo', true).order('created_at'),
       supabaseClient.from('ordens_servico_equipamentos').select('equipamento_id').eq('ordem_servico_id', osExistente.id)
