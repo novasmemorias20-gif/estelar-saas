@@ -1,5 +1,59 @@
 // js/copilot.js — Cosmos Copilot: botão flutuante + chat (Fase 1: apenas conversa)
 
+// Conversor markdown -> HTML bem pequeno, só pro que o Copilot realmente usa (negrito, itálico,
+// listas com marcadores/numeradas, parágrafos). Escapa o texto ANTES de gerar qualquer tag,
+// então não existe caminho pra HTML/script injetado virar tag de verdade.
+function escaparHtmlCopilot(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function renderizarMarkdownSimples(texto) {
+  const linhas = escaparHtmlCopilot(String(texto ?? '')).split('\n');
+  let html = '';
+  let dentroLista = null; // 'ul' | 'ol' | null
+  let paragrafoAtual = [];
+
+  function fecharParagrafo() {
+    if (paragrafoAtual.length) {
+      html += `<p>${paragrafoAtual.join('<br>')}</p>`;
+      paragrafoAtual = [];
+    }
+  }
+  function fecharLista() {
+    if (dentroLista) { html += `</${dentroLista}>`; dentroLista = null; }
+  }
+  function aplicarInline(s) {
+    return s
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[^*])\*([^*]+)\*(?!\*)/g, '$1<em>$2</em>');
+  }
+
+  for (const linhaBruta of linhas) {
+    const linha = linhaBruta.trim();
+    const itemLista = linha.match(/^[-*]\s+(.*)/);
+    const itemNumerado = linha.match(/^\d+\.\s+(.*)/);
+
+    if (itemLista) {
+      fecharParagrafo();
+      if (dentroLista !== 'ul') { fecharLista(); html += '<ul>'; dentroLista = 'ul'; }
+      html += `<li>${aplicarInline(itemLista[1])}</li>`;
+    } else if (itemNumerado) {
+      fecharParagrafo();
+      if (dentroLista !== 'ol') { fecharLista(); html += '<ol>'; dentroLista = 'ol'; }
+      html += `<li>${aplicarInline(itemNumerado[1])}</li>`;
+    } else if (linha === '') {
+      fecharLista();
+      fecharParagrafo();
+    } else {
+      fecharLista();
+      paragrafoAtual.push(aplicarInline(linha));
+    }
+  }
+  fecharLista();
+  fecharParagrafo();
+  return html || escaparHtmlCopilot(String(texto ?? ''));
+}
+
 function montarCopilot() {
   const wrap = document.createElement('div');
   wrap.innerHTML = `
@@ -33,7 +87,11 @@ function montarCopilot() {
   function addMensagem(texto, tipo) {
     const div = document.createElement('div');
     div.className = 'copilot-msg ' + tipo;
-    div.textContent = texto;
+    if (tipo === 'ia') {
+      div.innerHTML = renderizarMarkdownSimples(texto);
+    } else {
+      div.textContent = texto;
+    }
     mensagens.appendChild(div);
     mensagens.scrollTop = mensagens.scrollHeight;
     return div;
