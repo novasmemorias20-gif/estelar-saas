@@ -1016,7 +1016,7 @@ async function salvarDadosEmpresa() {
 
 // Aparece no rodapé da aba Ajustes — ajuda a confirmar se um aparelho já pegou a última
 // atualização. Suba isso junto com o CACHE_NOME lá no sw.js sempre que publicar uma mudança.
-const VERSAO_APP = '2026.09.22.2';
+const VERSAO_APP = '2026.10.06.1';
 
 const FINANCEIRO_OCULTO_KEY = 'estelar_financeiro_oculto';
 const ONBOARDING_COLAPSADO_KEY = 'estelar_onboarding_colapsado';
@@ -1034,6 +1034,7 @@ const TOUR_PASSOS = [
   { chave: 'os', titulo: 'Crie sua primeira Ordem de Serviço', descricao: 'Acompanhe o serviço do agendamento até o pagamento.', aba: null }
 ];
 
+let tourMinimizado = false;
 function tourAtivo() { return localStorage.getItem(TOUR_ATIVO_KEY) === '1'; }
 function tourPassoAtual() { return parseInt(localStorage.getItem(TOUR_PASSO_KEY) || '0', 10); }
 
@@ -1042,6 +1043,7 @@ function iniciarTourNoPasso(idx) {
   localStorage.setItem(TOUR_PASSO_KEY, String(idx));
   localStorage.setItem(TOUR_OFERECIDO_KEY, '1');
   const passo = TOUR_PASSOS[idx];
+  tourMinimizado = true; // já vai pra tela do passo com o aviso recolhido, sem cobrir os campos
   if (passo) { if (passo.aba) mostrarAba(passo.aba); else irParaNovaOS(); }
   renderTourWidget();
 }
@@ -1059,6 +1061,7 @@ function avancarTour(chave) {
   if (!atual || atual.chave !== chave) return;
   const proximo = idx + 1;
   localStorage.setItem(TOUR_PASSO_KEY, String(proximo));
+  tourMinimizado = false; // abre o aviso expandido pra mostrar a comemoração e o próximo passo
   renderTourWidget(true);
   if (proximo >= TOUR_PASSOS.length) {
     setTimeout(() => { localStorage.setItem(TOUR_ATIVO_KEY, '0'); renderTourWidget(); }, 4000);
@@ -1068,19 +1071,38 @@ function avancarTour(chave) {
 function renderTourWidget(comemorar) {
   const el = document.getElementById('tourGuiado');
   if (!el) return;
-  if (!tourAtivo()) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  if (!tourAtivo()) { el.style.display = 'none'; el.innerHTML = ''; document.body.classList.remove('tour-aberto', 'tour-recolhido'); return; }
   const idx = tourPassoAtual();
+  document.body.classList.toggle('tour-aberto', !tourMinimizado || idx >= TOUR_PASSOS.length);
+  document.body.classList.toggle('tour-recolhido', tourMinimizado && idx < TOUR_PASSOS.length);
   if (idx >= TOUR_PASSOS.length) {
+    el.classList.remove('recolhido');
     el.style.display = 'block';
     el.innerHTML = `<div class="tour-comemora">🎉 Tour concluído! Seu Cosmos Clima já está pronto pra rodar de verdade.</div>`;
     return;
   }
   const passo = TOUR_PASSOS[idx];
   el.style.display = 'block';
+  if (tourMinimizado) {
+    el.classList.add('recolhido');
+    el.innerHTML = `
+      <div class="tour-mini" id="tourExpandir" role="button" aria-label="Expandir tour">
+        <span class="tour-mini-txt"><b>Passo ${idx + 1}/${TOUR_PASSOS.length}</b> · ${esc(passo.titulo)}</span>
+        <span class="tour-mini-seta">▲</span>
+        <button class="tour-fechar" id="tourFechar" title="Pular tour">×</button>
+      </div>`;
+    document.getElementById('tourFechar').addEventListener('click', (e) => { e.stopPropagation(); pularTour(); });
+    document.getElementById('tourExpandir').addEventListener('click', () => { tourMinimizado = false; renderTourWidget(); });
+    return;
+  }
+  el.classList.remove('recolhido');
   el.innerHTML = `
     <div class="tour-cabecalho">
       <span>Tour guiado · Passo ${idx + 1} de ${TOUR_PASSOS.length}</span>
-      <button class="tour-fechar" id="tourFechar" title="Pular tour">×</button>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <button class="tour-fechar" id="tourMinimizar" title="Recolher" style="font-size:15px;">▼</button>
+        <button class="tour-fechar" id="tourFechar" title="Pular tour">×</button>
+      </div>
     </div>
     ${comemorar ? '<div class="tour-comemora">🎉 Boa! Passo concluído.</div>' : ''}
     <div class="tour-titulo">${esc(passo.titulo)}</div>
@@ -1088,7 +1110,12 @@ function renderTourWidget(comemorar) {
     <button class="btn tour-btn" id="tourIr">Ir até lá</button>
   `;
   document.getElementById('tourFechar').addEventListener('click', pularTour);
-  document.getElementById('tourIr').addEventListener('click', () => { if (passo.aba) mostrarAba(passo.aba); else irParaNovaOS(); });
+  document.getElementById('tourMinimizar').addEventListener('click', () => { tourMinimizado = true; renderTourWidget(); });
+  document.getElementById('tourIr').addEventListener('click', () => {
+    tourMinimizado = true; // recolhe ao ir até a tela do passo, pra não tapar campos e botões
+    if (passo.aba) mostrarAba(passo.aba); else irParaNovaOS();
+    renderTourWidget();
+  });
 }
 
 
@@ -1729,6 +1756,8 @@ async function renderClientes() {
       <label>E-mail</label><input type="text" id="clEmail" placeholder="cliente@email.com">
       <label>Endereço</label><input type="text" id="clEndereco" placeholder="Rua, número, bairro, cidade">
       <label>Observações</label><input type="text" id="clObs" placeholder="Opcional">
+      <label>Classificação</label>
+      ${clClasseSelectHtml('clClasse', '')}
       <label>Intervalo de retorno (manutenção)</label>
       <select id="clIntervalo">
         <option value="">Não controlar</option>
@@ -1818,6 +1847,19 @@ async function clCarregarLista() {
   atualizarAvisoLimiteClientes();
 }
 
+const CL_CLASSES = {
+  verde: { emoji: '🟢', label: 'Cliente normal' },
+  amarelo: { emoji: '🟡', label: 'Cliente difícil' },
+  vermelho: { emoji: '🔴', label: 'Cliente demitido' }
+};
+function clBolinha(classe) { return CL_CLASSES[classe] ? CL_CLASSES[classe].emoji : ''; }
+function clClasseSelectHtml(id, atual) {
+  return `<select id="${id}">
+    <option value="">Sem classificação</option>
+    ${Object.entries(CL_CLASSES).map(([k, v]) => `<option value="${k}" ${atual === k ? 'selected' : ''}>${v.emoji} ${v.label}</option>`).join('')}
+  </select>`;
+}
+
 function clRenderLista(termo) {
   const listaEl = document.getElementById("clLista");
   const filtrados = !termo ? clientesCache : clientesCache.filter(c =>
@@ -1830,7 +1872,7 @@ function clRenderLista(termo) {
   listaEl.innerHTML = filtrados.map(c => `
     <div class="lista-item" style="cursor:pointer;" data-ver-cliente="${c.id}">
       <div class="info">
-        <div class="titulo-item">${esc(c.nome)}</div>
+        <div class="titulo-item">${clBolinha(c.classificacao) ? clBolinha(c.classificacao) + ' ' : ''}${esc(c.nome)}</div>
         <div class="sub-item">${esc([c.telefone, c.email].filter(Boolean).join(' · ') || '—')}</div>
         ${c.endereco ? `<div class="sub-item">${esc(c.endereco)}</div>` : ''}
       </div>
@@ -1937,7 +1979,8 @@ async function clVerDetalhes(id) {
     <div class="card" id="clDadosCard">
       <div style="display:flex; justify-content:space-between; align-items:flex-start;">
         <div style="flex:1;">
-          <h3>${esc(cliente.nome)}</h3>
+          <h3>${clBolinha(cliente.classificacao) ? clBolinha(cliente.classificacao) + ' ' : ''}${esc(cliente.nome)}</h3>
+          ${CL_CLASSES[cliente.classificacao] ? `<div class="sub-item" style="font-weight:600;">${CL_CLASSES[cliente.classificacao].label}</div>` : ''}
           <div class="sub-item">${esc([cliente.telefone, cliente.email].filter(Boolean).join(' · ') || '—')}</div>
           ${cliente.endereco ? `<div class="sub-item">${esc(cliente.endereco)}</div>` : ''}
           ${cliente.observacoes ? `<div class="sub-item" style="margin-top:6px;">${esc(cliente.observacoes)}</div>` : ''}
@@ -2069,6 +2112,8 @@ function clMostrarEdicao(cliente) {
     <label>E-mail</label><input type="text" id="clEditEmail" value="${esc(cliente.email || '')}">
     <label>Endereço</label><input type="text" id="clEditEndereco" value="${esc(cliente.endereco || '')}">
     <label>Observações</label><input type="text" id="clEditObs" value="${esc(cliente.observacoes || '')}">
+    <label>Classificação</label>
+    ${clClasseSelectHtml('clEditClasse', cliente.classificacao || '')}
     <div class="msg" id="clEditMsg"></div>
     <div class="action-row">
       <button class="btn" id="clEditSalvarBtn">Salvar</button>
@@ -2088,11 +2133,12 @@ async function clSalvarEdicao(id) {
     telefone: document.getElementById('clEditTelefone').value.trim(),
     email: document.getElementById('clEditEmail').value.trim(),
     endereco: document.getElementById('clEditEndereco').value.trim(),
-    observacoes: document.getElementById('clEditObs').value.trim()
+    observacoes: document.getElementById('clEditObs').value.trim(),
+    classificacao: document.getElementById('clEditClasse').value || null
   }).eq('id', id);
   if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar.'; return; }
   const idxCache = clientesCache.findIndex(c => c.id === id);
-  if (idxCache >= 0) Object.assign(clientesCache[idxCache], { nome, telefone: document.getElementById('clEditTelefone').value.trim(), email: document.getElementById('clEditEmail').value.trim(), endereco: document.getElementById('clEditEndereco').value.trim(), observacoes: document.getElementById('clEditObs').value.trim() });
+  if (idxCache >= 0) Object.assign(clientesCache[idxCache], { nome, telefone: document.getElementById('clEditTelefone').value.trim(), email: document.getElementById('clEditEmail').value.trim(), endereco: document.getElementById('clEditEndereco').value.trim(), observacoes: document.getElementById('clEditObs').value.trim(), classificacao: document.getElementById('clEditClasse').value || null });
   await clVerDetalhes(id);
 }
 
@@ -2196,11 +2242,13 @@ async function clSalvarNovo() {
     email: document.getElementById('clEmail').value.trim(),
     endereco: document.getElementById('clEndereco').value.trim(),
     observacoes: document.getElementById('clObs').value.trim(),
+    classificacao: document.getElementById('clClasse').value || null,
     intervalo_retorno_dias: document.getElementById('clIntervalo').value ? parseInt(document.getElementById('clIntervalo').value) : null
   });
   if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar cliente.'; return; }
   ['clNome','clTelefone','clEmail','clEndereco','clObs'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('clIntervalo').value = '';
+  document.getElementById('clClasse').value = '';
   msg.className = 'msg ok'; msg.textContent = 'Cliente salvo!';
   avancarTour('cliente');
   await clCarregarLista();
@@ -2466,6 +2514,7 @@ let osContexto = null;
 async function renderAgenda() {
   agModo = 'calendario';
   if (!agCalendarRef) agCalendarRef = new Date();
+  await agReconciliarComOS();
   const conteudo = document.getElementById("conteudo");
   const { data: clientes } = await supabaseClient.from("clientes").select("id,nome").eq("empresa_id", empresaAtual.id).order("nome");
   const opcoesClientes = (clientes || []).map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('');
@@ -2626,11 +2675,12 @@ async function agRenderCompromisso(card) {
     <label>Título</label><input type="text" id="cpTitulo" value="${esc(ag.titulo || '')}">
     <label>Data e hora</label><input type="datetime-local" id="cpDataHora" value="${agParaInputDatetime(ag.data_hora)}">
     <label>Status</label>
-    <select id="cpStatus">
+    <select id="cpStatus" ${osVinculada && ag.status !== 'cancelado' ? 'disabled' : ''}>
       <option value="agendado" ${ag.status === 'agendado' ? 'selected' : ''}>Agendado</option>
       <option value="concluido" ${ag.status === 'concluido' ? 'selected' : ''}>Concluído</option>
       <option value="cancelado" ${ag.status === 'cancelado' ? 'selected' : ''}>Cancelado</option>
     </select>
+    ${osVinculada && ag.status !== 'cancelado' ? '<p class="note" style="margin-top:-6px;">Este agendamento pertence a uma Ordem de Serviço — o status acompanha a OS automaticamente.</p>' : ''}
     <label>Observações</label><input type="text" id="cpObs" value="${esc(ag.observacoes || '')}">
     <div class="msg" id="cpMsg"></div>
     <button class="btn" id="cpSalvarBtn">Salvar alterações</button>
@@ -2651,7 +2701,7 @@ async function cpSalvar() {
   const { error } = await supabaseClient.from('agenda').update({
     titulo: document.getElementById('cpTitulo').value.trim(),
     data_hora: new Date(dataHora).toISOString(),
-    status: document.getElementById('cpStatus').value,
+    ...(document.getElementById('cpStatus').disabled ? {} : { status: document.getElementById('cpStatus').value }),
     observacoes: document.getElementById('cpObs').value.trim()
   }).eq('id', agAgendaSelecionadaId);
   if (error) { msg.className = 'msg erro'; msg.textContent = 'Erro ao salvar.'; return; }
@@ -2689,10 +2739,18 @@ async function agRenderCalendario(card) {
     .gte('data_hora', inicioRange)
     .lte('data_hora', fimRange);
 
+  // Descobre quais compromissos pertencem a uma OS (os demais são reuniões/visitas avulsas)
+  const idsMes = (data || []).map(a => a.id);
+  let idsDeOS = new Set();
+  if (idsMes.length) {
+    const { data: osMes } = await supabaseClient.from('ordens_servico').select('agenda_id').in('agenda_id', idsMes);
+    idsDeOS = new Set((osMes || []).map(o => o.agenda_id));
+  }
   const porDia = {};
   (data || []).forEach(a => {
     const dia = new Date(a.data_hora).getDate();
-    porDia[dia] = (porDia[dia] || 0) + 1;
+    if (!porDia[dia]) porDia[dia] = { os: false, comp: false };
+    if (idsDeOS.has(a.id)) porDia[dia].os = true; else porDia[dia].comp = true;
   });
 
   const nomeMes = ref.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
@@ -2706,7 +2764,7 @@ async function agRenderCalendario(card) {
   for (let d = 1; d <= totalDias; d++) {
     const tem = porDia[d];
     const ehHoje = hoje.getFullYear() === ano && hoje.getMonth() === mes && hoje.getDate() === d;
-    celulas += `<div class="cal-dia ${tem ? 'cal-tem' : ''} ${ehHoje ? 'cal-hoje' : ''}" data-dia="${d}">${d}${tem ? `<span class="cal-dot"></span>` : ''}</div>`;
+    celulas += `<div class="cal-dia ${tem ? 'cal-tem' : ''} ${ehHoje ? 'cal-hoje' : ''}" data-dia="${d}">${d}${tem ? `<span class="cal-dots">${tem.os ? '<span class="cal-dot cal-dot-os"></span>' : ''}${tem.comp ? '<span class="cal-dot cal-dot-comp"></span>' : ''}</span>` : ''}</div>`;
   }
 
   card.innerHTML = `
@@ -2717,6 +2775,7 @@ async function agRenderCalendario(card) {
     </div>
     <div class="cal-grid cal-cabecalho">${diasSemana.map(d => `<div>${d}</div>`).join('')}</div>
     <div class="cal-grid">${celulas}</div>
+    <div class="cal-legenda"><span><i class="cal-dot cal-dot-os"></i> Ordem de Serviço</span><span><i class="cal-dot cal-dot-comp"></i> Compromisso (reunião, visita)</span></div>
   `;
 
   document.getElementById('calAnteriorBtn').addEventListener('click', () => { agCalendarRef = new Date(ano, mes - 1, 1); agAtualizarDinamico(); });
@@ -2743,11 +2802,16 @@ async function agRenderDia(card) {
     .gte('data_hora', inicio).lte('data_hora', fim)
     .order('data_hora');
 
+  let idsDeOSDia = new Set();
+  if (data && data.length) {
+    const { data: osDia } = await supabaseClient.from('ordens_servico').select('agenda_id').in('agenda_id', data.map(a => a.id));
+    idsDeOSDia = new Set((osDia || []).map(o => o.agenda_id));
+  }
   const lista = (data && data.length) ? data.map(a => `
     <div class="lista-item" style="cursor:pointer;" data-agenda="${a.id}">
       <div class="info">
-        <div class="titulo-item">${a.clientes ? a.clientes.nome : (a.titulo || 'Sem cliente')}</div>
-        <div class="sub-item">${new Date(a.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · ${agTipoLabel(a.tipo)}</div>
+        <div class="titulo-item"><i class="cal-dot ${idsDeOSDia.has(a.id) ? 'cal-dot-os' : 'cal-dot-comp'}" style="display:inline-block; margin:0 6px 1px 0;"></i>${a.clientes ? a.clientes.nome : (a.titulo || 'Sem cliente')}</div>
+        <div class="sub-item">${new Date(a.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · ${idsDeOSDia.has(a.id) ? 'Ordem de Serviço' : agTipoLabel(a.tipo)}</div>
         <span class="status-tag status-${a.status}">${a.status}</span>
       </div>
     </div>
@@ -3491,6 +3555,11 @@ async function osSalvar(osId) {
 
   osContexto.osId = novoId;
 
+  // O compromisso vinculado à OS acompanha o status dela (sem precisar "fechar" separado)
+  if (osId && payload.agenda_id) {
+    await osSincronizarAgendaComStatus(payload.agenda_id, payload.status);
+  }
+
   let mensagemFinal = 'Salvo!';
   if (!osId) {
     avancarTour('os');
@@ -3505,6 +3574,28 @@ async function osSalvar(osId) {
 
   msg.className = 'msg ok'; msg.textContent = mensagemFinal;
   setTimeout(() => agAtualizarDinamico(), 500);
+}
+
+async function osSincronizarAgendaComStatus(agendaId, statusOS) {
+  const { data: ag } = await supabaseClient.from('agenda').select('status').eq('id', agendaId).maybeSingle();
+  if (!ag || ag.status === 'cancelado') return;
+  const novo = statusOS === 'concluida' ? 'concluido' : 'agendado';
+  if (ag.status === novo) return;
+  const { error } = await supabaseClient.from('agenda').update({ status: novo }).eq('id', agendaId);
+  if (!error) sincronizarGoogleCalendar({ acao: 'atualizar', agendaId });
+}
+
+// Corrige compromissos antigos: OS já concluída cujo compromisso vinculado ficou "agendado".
+let agReconciliado = false;
+async function agReconciliarComOS() {
+  if (agReconciliado) return;
+  agReconciliado = true;
+  try {
+    const { data: osConc } = await supabaseClient.from('ordens_servico').select('agenda_id').eq('empresa_id', empresaAtual.id).eq('status', 'concluida').not('agenda_id', 'is', null);
+    const ids = (osConc || []).map(o => o.agenda_id);
+    if (!ids.length) return;
+    await supabaseClient.from('agenda').update({ status: 'concluido' }).in('id', ids).eq('status', 'agendado');
+  } catch (e) { console.warn('Reconciliação agenda/OS falhou:', e); }
 }
 
 async function osExcluir(osId) {
