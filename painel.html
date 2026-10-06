@@ -339,7 +339,12 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
 .cal-dia:hover { background: var(--cinza-claro); }
 .cal-tem { font-weight: 700; color: var(--azul-texto); background: var(--azul-tinta); }
 .cal-hoje { outline: 1.5px solid var(--azul); outline-offset: -1.5px; }
-.cal-dot { display: block; width: 5px; height: 5px; border-radius: 50%; background: var(--ambar); margin: 3px auto 0; }
+.cal-dot { display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--ambar); margin: 0; flex-shrink: 0; }
+.cal-dots { display: flex; justify-content: center; gap: 3px; margin-top: 3px; }
+.cal-dot-os { background: #2563eb; }
+.cal-dot-comp { background: var(--ambar); }
+.cal-legenda { display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: center; margin-top: 14px; font-size: 11.5px; color: var(--cinza-texto); }
+.cal-legenda span { display: inline-flex; align-items: center; gap: 6px; }
 
 /* Início */
 .card-titulo { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
@@ -453,12 +458,20 @@ summary { cursor: pointer; color: var(--azul); font-size: 13px; font-weight: 700
   max-width: 380px; margin: 0 auto;
 }
 body.modo-desktop .tour-widget { left: auto; right: 24px; bottom: 24px; margin: 0; }
+body.modo-desktop .tour-widget.recolhido { right: 24px; }
 .tour-cabecalho { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; gap: 8px; }
 .tour-cabecalho span { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--azul-texto); }
 .tour-fechar { background: none; border: none; font-size: 20px; line-height: 1; color: var(--cinza-texto); cursor: pointer; padding: 0 2px; flex-shrink: 0; }
 .tour-titulo { font-family: "Manrope", sans-serif; font-weight: 800; font-size: 14.5px; margin-bottom: 4px; }
 .tour-desc { font-size: 12.5px; color: var(--cinza-texto); line-height: 1.4; margin-bottom: 10px; }
 .tour-btn { margin: 0 !important; }
+.tour-widget.recolhido { right: 84px; margin: 0; padding: 8px 12px; border-radius: 999px; box-shadow: 0 6px 18px rgba(15,23,42,.16); }
+.tour-mini { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.tour-mini-txt { flex: 1; min-width: 0; font-size: 12px; color: var(--escuro); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tour-mini-txt b { color: var(--azul-texto); }
+.tour-mini-seta { font-size: 10px; color: var(--cinza-texto); }
+body.tour-aberto #conteudo { padding-bottom: 190px; }
+body.tour-recolhido #conteudo { padding-bottom: 80px; }
 .tour-comemora { font-size: 13px; font-weight: 700; color: var(--sucesso); margin-bottom: 6px; }
 .onboarding-oferta-tour { display: flex; flex-direction: column; gap: 10px; background: var(--azul-tinta); border-radius: 12px; padding: 12px; margin: 12px 0 0; font-size: 13px; font-weight: 600; color: var(--azul-texto); }
 
