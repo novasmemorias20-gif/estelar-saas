@@ -1,8 +1,8 @@
 // Service worker do Cosmos Clima — cuidado ao editar.
-// Sobe esse número (ex: 'cosmos-v3') sempre que publicar uma atualização de painel.html/js,
+// Sobe esse número (ex: 'cosmos-v5') sempre que publicar uma atualização de painel.html/js,
 // senão quem já instalou o app pode continuar vendo a versão antiga por um tempo.
 // Atualize também o VERSAO_APP no topo do js/core.js (aparece na aba Ajustes).
-const CACHE_NOME = 'cosmos-v3';
+const CACHE_NOME = 'cosmos-v5';
 
 const ARQUIVOS_ESSENCIAIS = [
   './painel.html',
@@ -13,6 +13,7 @@ const ARQUIVOS_ESSENCIAIS = [
   './js/config.js',
   './js/utils.js',
   './js/assinatura.js',
+  './js/copilot.js',
   './manifest.json',
   './icon-192.png',
   './icon-192-maskable.png',
@@ -72,5 +73,29 @@ self.addEventListener('fetch', (event) => {
     }).catch(() =>
       caches.match(req).then((resposta) => resposta || caches.match('./painel.html'))
     )
+  );
+});
+
+// ===== Notificações push =====
+self.addEventListener('push', (event) => {
+  let dados = {};
+  try { dados = event.data ? event.data.json() : {}; } catch (e) { dados = { title: 'Cosmos Clima', body: event.data ? event.data.text() : '' }; }
+  event.waitUntil(self.registration.showNotification(dados.title || 'Cosmos Clima', {
+    body: dados.body || '',
+    icon: './icon-192.png',
+    badge: './icon-192.png',
+    tag: dados.tag || undefined,
+    data: { url: dados.url || './painel.html' }
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const destino = new URL((event.notification.data && event.notification.data.url) || './painel.html', self.registration.scope).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((janelas) => {
+      for (const j of janelas) { if ('focus' in j) return j.focus(); }
+      return self.clients.openWindow(destino);
+    })
   );
 });
