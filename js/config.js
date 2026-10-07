@@ -5,3 +5,4 @@ export const PLANO_PRECOS = { basico: { mensal: 39.90, anual: 399.00 }, completo
 export const VALORES_PADRAO = { baseInstalacao:280, baseManutencao:100, baseHigienizacao:175, add9000:0, add12000:0, add18000:60, add24000:100, add30000:150, add36000:210, multMedio:1.15, multDificil:1.45, precoMetro:45, precoSuporte:60, precoEletrica:100, materiaisInstalacao:120, materiaisManutencao:35 };
 export const DADOS_EMPRESA_PADRAO = { cnpj: '', endereco: '', telefone: '', email: '' };
 export const TEMA_ESCURO_KEY = "temaEscuro";
+export const VAPID_PUBLIC_KEY = "BMB60FZvTmnBbjM5HgT4G0890Y42Al_x5kIRwhrzVtykfMxClXYnRkZk7ZJFMB5Q4YILlqU3iQQOUrb0sjYO2N4";

@@ -1,4 +1,4 @@
-import { PLANO_PRECOS } from './config.js';
+import { PLANO_PRECOS, VAPID_PUBLIC_KEY } from './config.js';
 
 const SUPABASE_URL = "https://lkankciqsldutuncuvyl.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_QAzF6HlUkYoAumTQCzKuVg_FEmhtwQ8";
@@ -598,13 +598,20 @@ async function renderFuncAgenda() {
   if (itens === null) { conteudo.innerHTML = `<div class="card"><p class="msg erro">Sem internet e sem agenda salva neste aparelho ainda.</p></div>`; return; }
   conteudo.innerHTML = `
     <div class="topo" style="margin-bottom:14px;"><h2 style="margin:0;">Agenda</h2></div>
+    ${ajustesSecaoHtml('notificacoes', 'Avisos e notificações', ICONE_SINO, 'chip-ambar', notifCardHtml())}
     ${itens.length ? itens.map(a => `
       <div class="card" style="margin-bottom:10px;">
         <div class="titulo-item">${esc(a.titulo || (a.clientes ? a.clientes.nome : 'Compromisso'))}</div>
         <div class="sub-item">${a.data_hora ? new Date(a.data_hora).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : ''}</div>
+        ${a.data_hora ? `<div class="voltar-link" data-func-ics="${esc(a.id)}" style="margin-top:8px; text-align:left;">📅 Adicionar ao calendário do celular</div>` : ''}
       </div>
     `).join('') : '<div class="card"><p class="vazio">Nenhum compromisso.</p></div>'}
   `;
+  conteudo.querySelectorAll('[data-func-ics]').forEach(el => el.addEventListener('click', () => {
+    agBaixarIcs(itens.find(x => String(x.id) === el.getAttribute('data-func-ics')));
+  }));
+  ligarTogglesAjustes(conteudo);
+  notifLigar(conteudo);
 }
 
 function ativarTab(nome) {
@@ -704,6 +711,8 @@ function mostrarAba(nome) {
         <div class="msg" id="msgIndicacao"></div>
       `)}
 
+      ${ajustesSecaoHtml('notificacoes', 'Notificações', ICONE_SINO, 'chip-ambar', notifCardHtml())}
+
       ${ajustesSecaoHtml('backup', 'Dados e backup', ICONE_DOWNLOAD, 'chip-azul', `
         <p class="note" style="margin-top:-4px;">Seus dados e os dos seus clientes são seus — baixe uma cópia sempre que quiser, pra guardar ou levar pra outro lugar.</p>
         <button class="btn btn-secundario" id="btnBackupCompleto">Baixar backup completo (JSON)</button>
@@ -743,7 +752,229 @@ function mostrarAba(nome) {
     document.getElementById('btnCopiarLinkIndicacao')?.addEventListener('click', copiarLinkIndicacao);
     if (temAcessoCompleto()) carregarListaFuncionarios();
     ligarTogglesAjustes(conteudo);
+    notifLigar(conteudo);
   }
+}
+
+/* ===================== NOTIFICAÇÕES (push + e-mail da manhã) E CALENDÁRIO DO CELULAR ===================== */
+
+const ICONE_SINO = '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>';
+const NOTIF_PADRAO = { push_ativo: false, push_antecedencia_min: 60, email_ativo: false, email_hora: 7 };
+let notifPrefs = null;
+let notifEmailUsuario = '';
+
+function notifEhIOS() { return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
+function notifEhInstalado() { return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; }
+
+// 'ok' | 'ios-instalar' | 'nao-suportado' | 'bloqueado'
+function notifStatusPush() {
+  if (notifEhIOS() && !notifEhInstalado()) return 'ios-instalar';
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return 'nao-suportado';
+  if (Notification.permission === 'denied') return 'bloqueado';
+  return 'ok';
+}
+
+function notifBase64ParaBytes(b64) {
+  const pad = '='.repeat((4 - b64.length % 4) % 4);
+  const bin = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from([...bin].map(c => c.charCodeAt(0)));
+}
+
+async function notifUsuarioId() {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  notifEmailUsuario = (session && session.user && session.user.email) || '';
+  return session ? session.user.id : null;
+}
+
+async function notifCarregarPrefs() {
+  const uid = await notifUsuarioId();
+  if (!uid) { notifPrefs = Object.assign({}, NOTIF_PADRAO); return notifPrefs; }
+  const { data } = await supabaseClient.from('notificacao_prefs').select('*').eq('user_id', uid).maybeSingle();
+  notifPrefs = Object.assign({}, NOTIF_PADRAO, data || {});
+  return notifPrefs;
+}
+
+async function notifSalvarPrefs(parcial) {
+  const uid = await notifUsuarioId();
+  if (!uid) throw new Error('Sessão expirada. Entre de novo.');
+  const novo = Object.assign({}, notifPrefs || NOTIF_PADRAO, parcial);
+  const { error } = await supabaseClient.from('notificacao_prefs').upsert({
+    user_id: uid, empresa_id: String(empresaAtual.id),
+    push_ativo: novo.push_ativo, push_antecedencia_min: novo.push_antecedencia_min,
+    email_ativo: novo.email_ativo, email_hora: novo.email_hora,
+    updated_at: new Date().toISOString()
+  }, { onConflict: 'user_id' });
+  if (error) throw error;
+  notifPrefs = novo;
+}
+
+async function notifAtivarPush() {
+  const permissao = await Notification.requestPermission();
+  if (permissao !== 'granted') throw new Error('A permissão de notificações não foi concedida.');
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: notifBase64ParaBytes(VAPID_PUBLIC_KEY) });
+  const j = sub.toJSON();
+  const uid = await notifUsuarioId();
+  const { error } = await supabaseClient.from('push_subscriptions').upsert({
+    user_id: uid, empresa_id: String(empresaAtual.id), endpoint: j.endpoint,
+    p256dh: j.keys.p256dh, auth: j.keys.auth, user_agent: navigator.userAgent.slice(0, 200)
+  }, { onConflict: 'endpoint' });
+  if (error) throw error;
+  await notifSalvarPrefs({ push_ativo: true });
+}
+
+async function notifDesativarPush() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      await supabaseClient.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+      await sub.unsubscribe();
+    }
+  } catch (e) { console.warn('Falha ao remover inscrição push:', e); }
+  await notifSalvarPrefs({ push_ativo: false });
+}
+
+function notifCardHtml() {
+  return `
+    <div class="checkbox-row" style="margin-top:0;">
+      <input type="checkbox" id="chkNotifPush">
+      <label>Avisar no celular antes dos compromissos</label>
+    </div>
+    <div id="notifPushDica" class="note" style="margin:4px 0 10px;"></div>
+    <div id="notifPushOpcoes" class="hidden">
+      <label>Avisar com antecedência de</label>
+      <select id="selNotifAntec">
+        <option value="15">15 minutos</option>
+        <option value="30">30 minutos</option>
+        <option value="60">1 hora</option>
+        <option value="120">2 horas</option>
+      </select>
+      <button class="btn btn-secundario" id="btnNotifTestePush" style="margin-top:8px;">Enviar notificação de teste</button>
+    </div>
+
+    <div class="checkbox-row" style="margin-top:18px;">
+      <input type="checkbox" id="chkNotifEmail">
+      <label>Receber por e-mail os compromissos do dia</label>
+    </div>
+    <div id="notifEmailOpcoes" class="hidden">
+      <label>Enviar às</label>
+      <select id="selNotifHora">
+        ${[5, 6, 7, 8, 9, 10].map(h => `<option value="${h}">${h}h da manhã</option>`).join('')}
+      </select>
+      <p class="note" id="notifEmailDestino" style="margin:6px 0 0;"></p>
+      <button class="btn btn-secundario" id="btnNotifTesteEmail" style="margin-top:8px;">Enviar e-mail de teste</button>
+    </div>
+    <p class="note" style="margin-top:14px;">O e-mail só é enviado nos dias em que há compromissos. Você também pode adicionar cada compromisso ao calendário do celular, pelo botão dentro dele.</p>
+    <div class="msg" id="msgNotif"></div>
+  `;
+}
+
+function notifDicaPush(status) {
+  if (status === 'ios-instalar') return '<b>iPhone:</b> pra receber avisos, instale o app primeiro. No Safari, toque em Compartilhar (□↑) → <b>Adicionar à Tela de Início</b>, abra o app por esse ícone e volte aqui. (Precisa do iOS 16.4 ou mais novo.)';
+  if (status === 'nao-suportado') return 'Este aparelho ou navegador não suporta notificações. No iPhone, é preciso o iOS 16.4+ com o app instalado na Tela de Início. No Android, use o Chrome.';
+  if (status === 'bloqueado') return 'As notificações estão bloqueadas pra este app. Libere nas configurações do navegador (cadeado ao lado do endereço → Notificações → Permitir) e volte aqui.';
+  return 'Um aviso chega no celular mesmo com o app fechado.';
+}
+
+async function notifLigar(container) {
+  const chkPush = container.querySelector('#chkNotifPush');
+  const chkEmail = container.querySelector('#chkNotifEmail');
+  if (!chkPush || !chkEmail) return;
+  const msg = container.querySelector('#msgNotif');
+  const aviso = (texto, ok) => { msg.className = 'msg ' + (ok ? 'ok' : 'erro'); msg.textContent = texto; };
+  const status = notifStatusPush();
+
+  await notifCarregarPrefs();
+
+  // Confere se este aparelho realmente tem inscrição ativa (o aviso pode ter sido desligado no sistema)
+  let inscritoAqui = false;
+  if (status === 'ok') {
+    try { inscritoAqui = !!(await (await navigator.serviceWorker.ready).pushManager.getSubscription()); } catch (e) { /* segue sem inscrição */ }
+  }
+  const pushLigado = notifPrefs.push_ativo && inscritoAqui && status === 'ok' && Notification.permission === 'granted';
+
+  chkPush.checked = pushLigado;
+  chkPush.disabled = status !== 'ok';
+  container.querySelector('#notifPushDica').innerHTML = notifDicaPush(status);
+  container.querySelector('#notifPushOpcoes').classList.toggle('hidden', !pushLigado);
+  container.querySelector('#selNotifAntec').value = String(notifPrefs.push_antecedencia_min);
+
+  chkEmail.checked = !!notifPrefs.email_ativo;
+  container.querySelector('#notifEmailOpcoes').classList.toggle('hidden', !notifPrefs.email_ativo);
+  container.querySelector('#selNotifHora').value = String(notifPrefs.email_hora);
+  container.querySelector('#notifEmailDestino').textContent = notifEmailUsuario ? 'Vai para: ' + notifEmailUsuario : '';
+
+  chkPush.addEventListener('change', async () => {
+    chkPush.disabled = true;
+    try {
+      if (chkPush.checked) { await notifAtivarPush(); aviso('Notificações ativadas neste aparelho.', true); }
+      else { await notifDesativarPush(); aviso('Notificações desativadas.', true); }
+      container.querySelector('#notifPushOpcoes').classList.toggle('hidden', !chkPush.checked);
+    } catch (e) {
+      chkPush.checked = !chkPush.checked;
+      aviso(e.message || 'Não foi possível alterar as notificações.', false);
+    }
+    chkPush.disabled = false;
+  });
+  container.querySelector('#selNotifAntec').addEventListener('change', async (e) => {
+    try { await notifSalvarPrefs({ push_antecedencia_min: parseInt(e.target.value, 10) }); aviso('Salvo.', true); }
+    catch (err) { aviso('Erro ao salvar.', false); }
+  });
+  chkEmail.addEventListener('change', async () => {
+    try {
+      await notifSalvarPrefs({ email_ativo: chkEmail.checked });
+      container.querySelector('#notifEmailOpcoes').classList.toggle('hidden', !chkEmail.checked);
+      aviso(chkEmail.checked ? 'Resumo por e-mail ativado.' : 'Resumo por e-mail desativado.', true);
+    } catch (err) { chkEmail.checked = !chkEmail.checked; aviso('Erro ao salvar.', false); }
+  });
+  container.querySelector('#selNotifHora').addEventListener('change', async (e) => {
+    try { await notifSalvarPrefs({ email_hora: parseInt(e.target.value, 10) }); aviso('Salvo.', true); }
+    catch (err) { aviso('Erro ao salvar.', false); }
+  });
+  const testar = async (botao, tipo) => {
+    botao.disabled = true;
+    try {
+      const { data, error } = await supabaseClient.functions.invoke('enviar-notificacoes', { body: { teste: tipo } });
+      if (error || !data || !data.ok) throw new Error((data && data.erro) || 'Falha no envio. Confira se a função foi publicada.');
+      aviso(tipo === 'push' ? 'Teste enviado! Deve chegar em instantes.' : 'E-mail de teste enviado! Veja sua caixa de entrada (e o spam).', true);
+    } catch (e) { aviso(e.message, false); }
+    botao.disabled = false;
+  };
+  container.querySelector('#btnNotifTestePush').addEventListener('click', (e) => testar(e.currentTarget, 'push'));
+  container.querySelector('#btnNotifTesteEmail').addEventListener('click', (e) => testar(e.currentTarget, 'email'));
+}
+
+/* ---- Adicionar compromisso ao calendário do celular (.ics) ---- */
+function icsEscapar(t) { return String(t || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n'); }
+function icsData(d) { return d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, ''); }
+
+function agBaixarIcs(ag) {
+  if (!ag || !ag.data_hora) return;
+  const ini = new Date(ag.data_hora);
+  const fim = new Date(ini.getTime() + 60 * 60000); // duração padrão de 1 hora
+  const titulo = ag.titulo || (ag.clientes && ag.clientes.nome) || agTipoLabel(ag.tipo) || 'Compromisso';
+  const desc = [ag.clientes && ag.clientes.nome ? 'Cliente: ' + ag.clientes.nome : '', ag.tipo ? agTipoLabel(ag.tipo) : '', ag.observacoes || ''].filter(Boolean).join('\n');
+  const linhas = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Cosmos Clima//PT-BR', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    'UID:' + ag.id + '@cosmosclima',
+    'DTSTAMP:' + icsData(new Date()),
+    'DTSTART:' + icsData(ini),
+    'DTEND:' + icsData(fim),
+    'SUMMARY:' + icsEscapar(titulo),
+    desc ? 'DESCRIPTION:' + icsEscapar(desc) : '',
+    'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsEscapar(titulo), 'TRIGGER:-PT60M', 'END:VALARM',
+    'END:VEVENT', 'END:VCALENDAR'
+  ].filter(Boolean);
+  const blob = new Blob([linhas.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'compromisso.ics';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  mostrarToast('Abra o arquivo baixado para adicionar ao calendário.', 'sucesso');
 }
 
 function ajustesSecaoHtml(id, titulo, iconeSvg, corChip, conteudoHtml, aberta) {
@@ -791,13 +1022,17 @@ async function baixarBackupCompleto() {
   const msg = document.getElementById('msgBackup');
   msg.className = 'msg'; msg.textContent = 'Gerando backup...';
   try {
-    const [clientes, os, orcamentos, contratos, agenda] = await Promise.all([
+    const [clientes, os, orcamentos, contratos, agenda, equipamentos, equipHistorico] = await Promise.all([
       supabaseClient.from('clientes').select('*').eq('empresa_id', empresaAtual.id),
       supabaseClient.from('ordens_servico').select('*').eq('empresa_id', empresaAtual.id),
       supabaseClient.from('orcamentos').select('*').eq('empresa_id', empresaAtual.id),
       supabaseClient.from('contratos').select('*').eq('empresa_id', empresaAtual.id),
-      supabaseClient.from('agenda').select('*').eq('empresa_id', empresaAtual.id)
+      supabaseClient.from('agenda').select('*').eq('empresa_id', empresaAtual.id),
+      supabaseClient.from('equipamentos').select('*').eq('empresa_id', empresaAtual.id),
+      supabaseClient.from('equipamento_historico').select('*').eq('empresa_id', empresaAtual.id)
     ]);
+    const falhas = [clientes, os, orcamentos, contratos, agenda, equipamentos, equipHistorico].filter(r => r.error);
+    if (falhas.length) throw new Error(falhas[0].error.message);
     const backup = {
       geradoEm: new Date().toISOString(),
       empresa: empresaAtual.nome_empresa,
@@ -805,9 +1040,11 @@ async function baixarBackupCompleto() {
       ordens_servico: os.data || [],
       orcamentos: orcamentos.data || [],
       contratos: contratos.data || [],
-      agenda: agenda.data || []
+      agenda: agenda.data || [],
+      equipamentos: equipamentos.data || [],
+      equipamento_historico: equipHistorico.data || []
     };
-    baixarArquivo(`backup-cosmos-pro-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(backup, null, 2), 'application/json');
+    baixarArquivo(`backup-cosmos-clima-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(backup, null, 2), 'application/json');
     msg.className = 'msg ok'; msg.textContent = 'Download iniciado!';
   } catch (e) {
     msg.className = 'msg erro'; msg.textContent = 'Erro ao gerar backup: ' + e.message;
@@ -1016,7 +1253,7 @@ async function salvarDadosEmpresa() {
 
 // Aparece no rodapé da aba Ajustes — ajuda a confirmar se um aparelho já pegou a última
 // atualização. Suba isso junto com o CACHE_NOME lá no sw.js sempre que publicar uma mudança.
-const VERSAO_APP = '2026.10.06.1';
+const VERSAO_APP = '2026.10.08.1';
 
 const FINANCEIRO_OCULTO_KEY = 'estelar_financeiro_oculto';
 const ONBOARDING_COLAPSADO_KEY = 'estelar_onboarding_colapsado';
@@ -1914,7 +2151,7 @@ async function clVerDetalhes(id) {
     ? orcamentos.map(o => `
         <div class="lista-item" style="cursor:pointer;" data-ver-orcamento="${o.id}">
           <div class="info">
-            <div class="titulo-item">${(o.dados && o.dados.numero) || 'Orçamento'} · ${money(o.valor_total || 0)}</div>
+            <div class="titulo-item">${esc((o.dados && o.dados.numero) || 'Orçamento')} · ${money(o.valor_total || 0)}</div>
             <div class="sub-item">${new Date(o.created_at).toLocaleDateString('pt-BR')} · ${o.tipo === 'avulso' ? 'Orçamento avulso' : o.tipo}</div>
           </div>
         </div>`).join('')
@@ -2181,7 +2418,7 @@ async function clVerOrcamento(orcamentoId, clienteId) {
 
   conteudo.innerHTML = `
     <div class="card">
-      <h3>${(orc.dados && orc.dados.numero) || 'Orçamento'}</h3>
+      <h3>${esc((orc.dados && orc.dados.numero) || 'Orçamento')}</h3>
       <div class="sub-item">${new Date(orc.created_at).toLocaleDateString('pt-BR')}</div>
       <div class="item-subtotal" style="margin-top:10px;"><span>Valor total</span><b>${money(orc.valor_total || 0)}</b></div>
     </div>
@@ -2684,11 +2921,16 @@ async function agRenderCompromisso(card) {
     <label>Observações</label><input type="text" id="cpObs" value="${esc(ag.observacoes || '')}">
     <div class="msg" id="cpMsg"></div>
     <button class="btn" id="cpSalvarBtn">Salvar alterações</button>
+    <button class="btn btn-secundario" id="cpIcsBtn">📅 Adicionar ao calendário do celular</button>
     ${osVinculada ? `<button class="btn btn-secundario" id="cpAbrirOSBtn">Ver Ordem de Serviço</button>` : ''}
     <button class="btn btn-secundario" id="cpExcluirBtn" style="color:var(--erro); border-color:var(--erro);">Excluir este compromisso</button>
   `;
   document.getElementById('cpVoltarBtn').addEventListener('click', () => { agModo = 'dia'; agAtualizarDinamico(); });
   document.getElementById('cpSalvarBtn').addEventListener('click', (e) => comCarregamento(e.currentTarget, cpSalvar));
+  document.getElementById('cpIcsBtn').addEventListener('click', () => agBaixarIcs(Object.assign({}, ag, {
+    titulo: document.getElementById('cpTitulo').value.trim() || ag.titulo,
+    data_hora: document.getElementById('cpDataHora').value ? new Date(document.getElementById('cpDataHora').value).toISOString() : ag.data_hora
+  })));
   document.getElementById('cpAbrirOSBtn')?.addEventListener('click', () => osAbrirComContexto({ osId: osVinculada.id }));
   document.getElementById('cpExcluirBtn').addEventListener('click', (e) => comCarregamento(e.currentTarget, cpExcluir, 'Excluindo...'));
   if (ag.cliente_id) document.getElementById('cpVerClienteBtn').addEventListener('click', () => irParaFichaCliente(ag.cliente_id));
@@ -2810,7 +3052,7 @@ async function agRenderDia(card) {
   const lista = (data && data.length) ? data.map(a => `
     <div class="lista-item" style="cursor:pointer;" data-agenda="${a.id}">
       <div class="info">
-        <div class="titulo-item"><i class="cal-dot ${idsDeOSDia.has(a.id) ? 'cal-dot-os' : 'cal-dot-comp'}" style="display:inline-block; margin:0 6px 1px 0;"></i>${a.clientes ? a.clientes.nome : (a.titulo || 'Sem cliente')}</div>
+        <div class="titulo-item"><i class="cal-dot ${idsDeOSDia.has(a.id) ? 'cal-dot-os' : 'cal-dot-comp'}" style="display:inline-block; margin:0 6px 1px 0;"></i>${esc(a.clientes ? a.clientes.nome : (a.titulo || 'Sem cliente'))}</div>
         <div class="sub-item">${new Date(a.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · ${idsDeOSDia.has(a.id) ? 'Ordem de Serviço' : agTipoLabel(a.tipo)}</div>
         <span class="status-tag status-${a.status}">${a.status}</span>
       </div>
