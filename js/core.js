@@ -937,7 +937,9 @@ async function notifLigar(container) {
     botao.disabled = true;
     try {
       const { data, error } = await supabaseClient.functions.invoke('enviar-notificacoes', { body: { teste: tipo } });
-      if (error || !data || !data.ok) throw new Error((data && data.erro) || 'Falha no envio. Confira se a função foi publicada.');
+      let detalhe = '';
+      if (error && error.context && typeof error.context.json === 'function') { try { detalhe = (await error.context.json()).erro || ''; } catch (e2) { /* sem detalhe */ } }
+      if (error || !data || !data.ok) throw new Error(detalhe || (data && data.erro) || 'Falha no envio. Confira se a função foi publicada.');
       aviso(tipo === 'push' ? 'Teste enviado! Deve chegar em instantes.' : 'E-mail de teste enviado! Veja sua caixa de entrada (e o spam).', true);
     } catch (e) { aviso(e.message, false); }
     botao.disabled = false;
@@ -1253,7 +1255,7 @@ async function salvarDadosEmpresa() {
 
 // Aparece no rodapé da aba Ajustes — ajuda a confirmar se um aparelho já pegou a última
 // atualização. Suba isso junto com o CACHE_NOME lá no sw.js sempre que publicar uma mudança.
-const VERSAO_APP = '2026.10.08.1';
+const VERSAO_APP = '2026.10.08.2';
 
 const FINANCEIRO_OCULTO_KEY = 'estelar_financeiro_oculto';
 const ONBOARDING_COLAPSADO_KEY = 'estelar_onboarding_colapsado';
