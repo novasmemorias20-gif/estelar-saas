@@ -1255,7 +1255,8 @@ async function salvarDadosEmpresa() {
 
 // Aparece no rodapé da aba Ajustes — ajuda a confirmar se um aparelho já pegou a última
 // atualização. Suba isso junto com o CACHE_NOME lá no sw.js sempre que publicar uma mudança.
-const VERSAO_APP = '2026.10.08.2';
+const VERSAO_APP = '2026.10.09.1';
+window.__versaoApp = VERSAO_APP;
 
 const FINANCEIRO_OCULTO_KEY = 'estelar_financeiro_oculto';
 const ONBOARDING_COLAPSADO_KEY = 'estelar_onboarding_colapsado';

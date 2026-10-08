@@ -1,5 +1,6 @@
 import { supabaseClient } from './supabase.js';
 import { renderStatusAssinatura, atualizarPrecosExibidos, assinarPlano } from './assinatura.js';
+import './erros.js';
 import './copilot.js';
 window.supabaseClient = supabaseClient;
 window.renderStatusAssinatura = renderStatusAssinatura;
