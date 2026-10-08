@@ -20,9 +20,10 @@ jobs:
           test -s backup.sql
           gzip -9 backup.sql
 
-      - name: Criptografar (o repositório é público: NUNCA subir o dump sem criptografia)
+      - name: Criptografar o backup
         env:
           BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        # O repositório é público: nunca subir o dump sem criptografia.
         run: |
           set -euo pipefail
           test -n "$BACKUP_PASSPHRASE"
