@@ -1,0 +1,39 @@
+name: Backup semanal do banco
+
+on:
+  schedule:
+    - cron: '0 6 * * 0'   # todo domingo, 03h no horário de Brasília
+  workflow_dispatch:       # permite rodar na mão (aba Actions → Run workflow)
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gerar dump do banco
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          # Usa o cliente PostgreSQL 17 (precisa ser >= versão do servidor)
+          docker run --rm postgres:17 pg_dump "$DB_URL" \
+            --no-owner --no-privileges --schema=public --schema=auth > backup.sql
+          test -s backup.sql
+          gzip -9 backup.sql
+
+      - name: Criptografar (o repositório é público: NUNCA subir o dump sem criptografia)
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          test -n "$BACKUP_PASSPHRASE"
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$BACKUP_PASSPHRASE" \
+            --symmetric --cipher-algo AES256 -o backup.sql.gz.gpg backup.sql.gz
+          rm -f backup.sql.gz
+          ls -lh backup.sql.gz.gpg
+
+      - name: Guardar backup (90 dias)
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-cosmos-${{ github.run_id }}
+          path: backup.sql.gz.gpg
+          retention-days: 90
