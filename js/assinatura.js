@@ -27,6 +27,18 @@ export function renderStatusAssinatura(){
   const trialAtivo = !!(empresaAtual.trial_completo_expira_em && new Date(empresaAtual.trial_completo_expira_em) > new Date());
   const diasTrial = trialAtivo ? Math.max(1, Math.ceil((new Date(empresaAtual.trial_completo_expira_em) - new Date()) / 86400000)) : 0;
   const trialElegivel = !trialAtivo && !empresaAtual.trial_completo_usado && empresaAtual.plano !== 'completo';
+  const dataAcesso = empresaAtual.assinatura_expira_em ? new Date(empresaAtual.assinatura_expira_em).toLocaleDateString('pt-BR') : null;
+  const cancelamentoPedido = !!empresaAtual.cancelamento_solicitado_em;
+  const podeCancelar = !cancelamentoPedido && empresaAtual.plano !== 'gratis' && ['ativa', 'atrasada'].includes(empresaAtual.assinatura_status);
+  const blocoCancelamento = cancelamentoPedido ? `
+    <div style="border-top:1px solid var(--borda); margin-top:22px; padding-top:16px; font-size:13px;">
+      <b>Cancelamento solicitado.</b> Não haverá novas cobranças.${dataAcesso ? ` Você continua com acesso até <b>${dataAcesso}</b>.` : ''} Seus dados continuam guardados. Mudou de ideia? É só assinar de novo acima.
+    </div>` : podeCancelar ? `
+    <div style="border-top:1px solid var(--borda); margin-top:22px; padding-top:16px;">
+      <p class="note" style="margin:0 0 10px;">Quer encerrar? Você cancela sozinho, sem precisar falar com ninguém. Continua com acesso até o fim do período já pago e seus dados não são apagados.</p>
+      <button class="btn btn-secundario" id="btnCancelarAssinatura" style="color:var(--erro); border-color:var(--erro);">Cancelar assinatura</button>
+      <div class="msg" id="msgCancelarAssinatura"></div>
+    </div>` : '';
   const TABELA_PLANOS = [
     { nome: 'Clientes e equipamentos', basico: true, completo: true },
     { nome: 'Orçamentos profissionais', basico: true, completo: true },
@@ -70,11 +82,13 @@ export function renderStatusAssinatura(){
       <button class="btn btn-ambar" id="btnAssinarCompleto"><b>Completo</b> — <span id="precoCompleto">R$ 129,90/mês</span></button>
     </div>
     <div class="msg" id="msgAssinatura"></div>
+    ${blocoCancelamento}
   `;
   document.getElementById('assinaturaCiclo').addEventListener('change', atualizarPrecosExibidos);
   document.getElementById('btnAssinarBasico').addEventListener('click', () => assinarPlano('basico'));
   document.getElementById('btnAssinarCompleto').addEventListener('click', () => assinarPlano('completo'));
   document.getElementById('btnIniciarTrialAssinatura')?.addEventListener('click', () => window.iniciarTrialCompleto && window.iniciarTrialCompleto());
+  document.getElementById('btnCancelarAssinatura')?.addEventListener('click', () => window.cancelarAssinatura && window.cancelarAssinatura());
   atualizarPrecosExibidos();
 }
 
