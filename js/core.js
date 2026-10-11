@@ -203,18 +203,25 @@ window.addEventListener('offline', () => offlineAtualizarIndicador());
 setInterval(offlineSincronizar, 30000);
 
 
+// Assinatura paga vigente: ativa, OU cancelada pelo próprio cliente mas ainda dentro do período que ele já pagou
+function acessoPagoVigente() {
+  if (!empresaAtual) return false;
+  if (empresaAtual.assinatura_status === 'ativa') return true;
+  return !!(empresaAtual.cancelamento_solicitado_em && empresaAtual.assinatura_expira_em && new Date(empresaAtual.assinatura_expira_em) > new Date());
+}
+
 function temAcessoCompleto() {
   if (!empresaAtual) return false;
   if (empresaAtual.cortesia) return true;
   if (trialCompletoAtivo()) return true;
-  return empresaAtual.plano === 'completo' && empresaAtual.assinatura_status === 'ativa';
+  return empresaAtual.plano === 'completo' && acessoPagoVigente();
 }
 
 function precisaEscolherPlano() {
   if (!empresaAtual) return false;
   if (empresaAtual.cortesia) return false;
   if (trialCompletoAtivo()) return false;
-  if (empresaAtual.plano !== 'gratis' && empresaAtual.assinatura_status === 'ativa') return false;
+  if (empresaAtual.plano !== 'gratis' && acessoPagoVigente()) return false;
   return true;
 }
 
@@ -1255,7 +1262,7 @@ async function salvarDadosEmpresa() {
 
 // Aparece no rodapé da aba Ajustes — ajuda a confirmar se um aparelho já pegou a última
 // atualização. Suba isso junto com o CACHE_NOME lá no sw.js sempre que publicar uma mudança.
-const VERSAO_APP = '2026.10.09.1';
+const VERSAO_APP = '2026.10.09.3';
 window.__versaoApp = VERSAO_APP;
 
 const FINANCEIRO_OCULTO_KEY = 'estelar_financeiro_oculto';
@@ -1292,6 +1299,7 @@ function pularTour() {
   localStorage.setItem(TOUR_ATIVO_KEY, '0');
   localStorage.setItem(TOUR_OFERECIDO_KEY, '1');
   renderTourWidget();
+  mostrarToast('Tour ignorado. Pra retomar, use "Fazer tour guiado" em Primeiros passos.', 'sucesso');
 }
 
 function avancarTour(chave) {
@@ -1329,7 +1337,7 @@ function renderTourWidget(comemorar) {
       <div class="tour-mini" id="tourExpandir" role="button" aria-label="Expandir tour">
         <span class="tour-mini-txt"><b>Passo ${idx + 1}/${TOUR_PASSOS.length}</b> · ${esc(passo.titulo)}</span>
         <span class="tour-mini-seta">▲</span>
-        <button class="tour-fechar" id="tourFechar" title="Pular tour">×</button>
+        <button class="tour-ignorar" id="tourFechar" type="button">Ignorar</button>
       </div>`;
     document.getElementById('tourFechar').addEventListener('click', (e) => { e.stopPropagation(); pularTour(); });
     document.getElementById('tourExpandir').addEventListener('click', () => { tourMinimizado = false; renderTourWidget(); });
@@ -1341,13 +1349,13 @@ function renderTourWidget(comemorar) {
       <span>Tour guiado · Passo ${idx + 1} de ${TOUR_PASSOS.length}</span>
       <div style="display:flex; gap:10px; align-items:center;">
         <button class="tour-fechar" id="tourMinimizar" title="Recolher" style="font-size:15px;">▼</button>
-        <button class="tour-fechar" id="tourFechar" title="Pular tour">×</button>
       </div>
     </div>
     ${comemorar ? '<div class="tour-comemora">🎉 Boa! Passo concluído.</div>' : ''}
     <div class="tour-titulo">${esc(passo.titulo)}</div>
     <div class="tour-desc">${esc(passo.descricao)}</div>
     <button class="btn tour-btn" id="tourIr">Ir até lá</button>
+    <button class="tour-ignorar" id="tourFechar" type="button">Ignorar tour</button>
   `;
   document.getElementById('tourFechar').addEventListener('click', pularTour);
   document.getElementById('tourMinimizar').addEventListener('click', () => { tourMinimizado = true; renderTourWidget(); });
@@ -2041,12 +2049,44 @@ async function renderClientes() {
 const LIMITE_CLIENTES_GRATIS = 10;
 const AVISO_CLIENTES_GRATIS = 8;
 
+async function cancelarAssinatura() {
+  const msg = document.getElementById('msgCancelarAssinatura');
+  const aviso = (t, ok) => { if (msg) { msg.className = 'msg ' + (ok ? 'ok' : 'erro'); msg.textContent = t; } };
+  if (!navigator.onLine) { aviso('Sem internet. Conecte-se para cancelar a assinatura.', false); return; }
+  const ate = empresaAtual.assinatura_expira_em ? new Date(empresaAtual.assinatura_expira_em).toLocaleDateString('pt-BR') : null;
+  const confirmou = await confirmarAcao(
+    'Você não será mais cobrado' + (ate ? ' e continua com acesso até ' + ate + ', o fim do período que já pagou' : '') +
+    '. Seus dados NÃO são apagados e ficam guardados caso você volte. Recomendamos baixar um backup em Ajustes → Dados e backup. Deseja cancelar a assinatura?',
+    { titulo: 'Cancelar assinatura', textoConfirmar: 'Sim, cancelar assinatura' }
+  );
+  if (!confirmou) return;
+  const botao = document.getElementById('btnCancelarAssinatura');
+  if (botao) botao.disabled = true;
+  aviso('Cancelando...', true);
+  try {
+    const { data, error } = await supabaseClient.functions.invoke('cancelar-assinatura', { body: {} });
+    if (error) {
+      let corpo = null;
+      try { corpo = await error.context?.json(); } catch (_) { /* sem corpo JSON */ }
+      throw new Error((corpo && corpo.error) || error.message);
+    }
+    if (!data || data.error || !data.ok) throw new Error((data && data.error) || 'Não foi possível cancelar.');
+    Object.assign(empresaAtual, data.empresa || {});
+    mostrarToast('Assinatura cancelada. Não haverá novas cobranças.', 'sucesso');
+    renderStatusAssinatura();
+  } catch (e) {
+    if (botao) botao.disabled = false;
+    aviso('Erro ao cancelar: ' + e.message + ' Se persistir, use Ajustes → Ajuda → Solicitar ajuda.', false);
+    if (window.registrarErro) window.registrarErro(e, 'cancelarAssinatura');
+  }
+}
+
 function planoEfetivo() {
   if (empresaAtual.cortesia) return 'completo';
   const plano = empresaAtual.plano || 'gratis';
   if (plano === 'gratis') return 'gratis';
   // Sem assinatura ativa (pendente/atrasada/cancelada), o acesso cai pro Essencial
-  return empresaAtual.assinatura_status === 'ativa' ? plano : 'basico';
+  return acessoPagoVigente() ? plano : 'basico';
 }
 
 function atualizarAvisoLimiteClientes() {
@@ -4835,7 +4875,7 @@ try {
     osAbrirComContexto, clExcluir, renderAgenda, agSalvarNovo, agAtualizarStatus, agAtualizarDinamico, irParaKanbanOS,
     agRenderKanban, cpSalvar, cpExcluir, agRenderCalendario, agRenderDia, voltarDoOS, osCriarCompromissoVinculado,
     osConfirmarAgendamento, osSalvar, osExcluir, renderAvulso, avSalvarOrcamento, avSalvarConfig, novoItemAvulso,
-    renderContrato, ctSalvarContrato, ctExcluirContrato, ctNovoEquip, iniciarTrialCompleto,
+    renderContrato, ctSalvarContrato, ctExcluirContrato, ctNovoEquip, iniciarTrialCompleto, cancelarAssinatura,
     eqSalvarNovo, eqToggleAtivo, eqVerDetalhes, eqMostrarEdicao, eqSalvarEdicao, eqHistSalvar, eqOsSincronizarSelecao };
   Object.entries(_expor).forEach(([k,v])=>{ if(typeof v==='function') window[k]=v; });
   window.empresaAtual = empresaAtual;
