@@ -1040,6 +1040,7 @@ async function baixarBackupCompleto() {
       supabaseClient.from('equipamentos').select('*').eq('empresa_id', empresaAtual.id),
       supabaseClient.from('equipamento_historico').select('*').eq('empresa_id', empresaAtual.id)
     ]);
+    const despesasBackup = await supabaseClient.from('despesas').select('*').eq('empresa_id', empresaAtual.id);
     const falhas = [clientes, os, orcamentos, contratos, agenda, equipamentos, equipHistorico].filter(r => r.error);
     if (falhas.length) throw new Error(falhas[0].error.message);
     const backup = {
@@ -1051,7 +1052,8 @@ async function baixarBackupCompleto() {
       contratos: contratos.data || [],
       agenda: agenda.data || [],
       equipamentos: equipamentos.data || [],
-      equipamento_historico: equipHistorico.data || []
+      equipamento_historico: equipHistorico.data || [],
+      despesas: despesasBackup.error ? [] : (despesasBackup.data || [])
     };
     baixarArquivo(`backup-cosmos-clima-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(backup, null, 2), 'application/json');
     msg.className = 'msg ok'; msg.textContent = 'Download iniciado!';
@@ -1262,7 +1264,7 @@ async function salvarDadosEmpresa() {
 
 // Aparece no rodapé da aba Ajustes — ajuda a confirmar se um aparelho já pegou a última
 // atualização. Suba isso junto com o CACHE_NOME lá no sw.js sempre que publicar uma mudança.
-const VERSAO_APP = '2026.10.09.3';
+const VERSAO_APP = '2026.10.13.2';
 window.__versaoApp = VERSAO_APP;
 
 const FINANCEIRO_OCULTO_KEY = 'estelar_financeiro_oculto';
@@ -1756,7 +1758,24 @@ async function renderInicio() {
   });
 }
 
+/* ===================== GRÁFICOS (INÍCIO DESKTOP) ===================== */
 let _graficoReceitaChart = null, _graficoOsChart = null;
+
+// Cores do gráfico seguem o tema (claro/escuro) lendo as mesmas variáveis do app.
+function finCoresGrafico() {
+  const cs = getComputedStyle(document.body);
+  return {
+    texto: (cs.getPropertyValue('--cinza-texto') || '').trim() || '#64748b',
+    linha: (cs.getPropertyValue('--cinza-linha') || '').trim() || '#e2e8f0'
+  };
+}
+
+// Valor curto pro eixo do gráfico: 1500 -> "R$ 1,5 mil"
+function finMoedaCurta(v) {
+  const n = Number(v) || 0;
+  if (Math.abs(n) >= 1000) return 'R$ ' + (n / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' mil';
+  return 'R$ ' + n.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+}
 
 function inicializarGraficosDesktop(dadosMeses) {
   if (!window.Chart) return;
@@ -1767,22 +1786,46 @@ function inicializarGraficosDesktop(dadosMeses) {
   if (_graficoReceitaChart) _graficoReceitaChart.destroy();
   if (_graficoOsChart) _graficoOsChart.destroy();
 
+  const cores = finCoresGrafico();
+  const media = dadosMeses.reduce((s, m) => s + m.recebido, 0) / (dadosMeses.length || 1);
+  const ultimo = dadosMeses.length - 1;
+
   _graficoReceitaChart = new Chart(elReceita, {
-    type: 'line',
+    type: 'bar',
     data: {
       labels: dadosMeses.map(m => m.label),
-      datasets: [{
-        label: 'Recebido',
-        data: dadosMeses.map(m => m.recebido),
-        borderColor: '#2563eb',
-        backgroundColor: 'rgba(37,99,235,.08)',
-        fill: true, tension: .35, pointRadius: 3, pointBackgroundColor: '#2563eb'
-      }]
+      datasets: [
+        {
+          type: 'bar',
+          label: 'Recebido',
+          data: dadosMeses.map(m => m.recebido),
+          // meses anteriores mais claros, mês atual em destaque
+          backgroundColor: dadosMeses.map((m, i) => i === ultimo ? '#2563eb' : 'rgba(37,99,235,.45)'),
+          borderRadius: 6,
+          maxBarThickness: 46
+        },
+        {
+          type: 'line',
+          label: 'Média dos 6 meses',
+          data: dadosMeses.map(() => media),
+          borderColor: '#F2734A',
+          borderDash: [6, 5],
+          borderWidth: 2,
+          pointRadius: 0,
+          fill: false
+        }
+      ]
     },
     options: {
       responsive: true,
-      plugins: { legend: { display: false } },
-      scales: { y: { ticks: { callback: (v) => 'R$ ' + v } } }
+      plugins: {
+        legend: { position: 'bottom', labels: { color: cores.texto, usePointStyle: true, boxWidth: 8 } },
+        tooltip: { callbacks: { label: (ctx) => ' ' + ctx.dataset.label + ': ' + money(ctx.parsed.y || 0) } }
+      },
+      scales: {
+        x: { ticks: { color: cores.texto }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { color: cores.texto, callback: (v) => finMoedaCurta(v) }, grid: { color: cores.linha } }
+      }
     }
   });
 
@@ -1791,19 +1834,23 @@ function inicializarGraficosDesktop(dadosMeses) {
     data: {
       labels: dadosMeses.map(m => m.label),
       datasets: [
-        { label: 'Aberta', data: dadosMeses.map(m => m.abertas), backgroundColor: '#2563eb' },
-        { label: 'Em andamento', data: dadosMeses.map(m => m.andamento), backgroundColor: '#f59e0b' },
-        { label: 'Concluída', data: dadosMeses.map(m => m.concluidas), backgroundColor: '#16a34a' }
+        { label: 'Aberta', data: dadosMeses.map(m => m.abertas), backgroundColor: '#2563eb', borderRadius: 4 },
+        { label: 'Em andamento', data: dadosMeses.map(m => m.andamento), backgroundColor: '#f59e0b', borderRadius: 4 },
+        { label: 'Concluída', data: dadosMeses.map(m => m.concluidas), backgroundColor: '#16a34a', borderRadius: 4 }
       ]
     },
     options: {
       responsive: true,
-      scales: { x: { stacked: true }, y: { stacked: true, ticks: { stepSize: 1 } } },
-      plugins: { legend: { position: 'bottom' } }
+      scales: {
+        x: { stacked: true, ticks: { color: cores.texto }, grid: { display: false } },
+        y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1, color: cores.texto }, grid: { color: cores.linha } }
+      },
+      plugins: { legend: { position: 'bottom', labels: { color: cores.texto, usePointStyle: true, boxWidth: 8 } } }
     }
   });
 }
 
+/* ===================== FINANCEIRO DETALHADO ===================== */
 const FINANCEIRO_FILTROS = [
   { chave: 'todos', label: 'Todos' },
   { chave: 'pago', label: 'Pagas' },
@@ -1811,66 +1858,333 @@ const FINANCEIRO_FILTROS = [
   { chave: 'em_execucao', label: 'Em execução' }
 ];
 
-async function abrirFinanceiroDetalhado(mesOffset = 0, filtro = 'todos') {
+// Tipos de serviço usados no filtro e nos gráficos. A OS não guarda o tipo numa coluna própria:
+// ele é deduzido do orçamento/contrato de origem (mesmo vocabulário do Orçamento avulso).
+const FIN_TIPOS = [
+  { chave: 'instalacao', label: 'Instalação', cor: '#2563eb' },
+  { chave: 'manutencao', label: 'Manutenção', cor: '#F2734A' },
+  { chave: 'higienizacao', label: 'Higienização', cor: '#16a34a' },
+  { chave: 'pmoc', label: 'Contrato PMOC', cor: '#7c3aed' },
+  { chave: 'misto', label: 'Vários serviços', cor: '#0891b2' },
+  { chave: 'outro', label: 'Sem tipo', cor: '#94a3b8' }
+];
+const FIN_TIPOS_SIMPLES = ['instalacao', 'manutencao', 'higienizacao'];
+
+function finTipoInfo(chave) {
+  return FIN_TIPOS.find(t => t.chave === chave) || FIN_TIPOS[FIN_TIPOS.length - 1];
+}
+
+// Lê os tipos de serviço dos itens guardados (formato antigo: it.tipo; formato novo: it.titulo).
+function finTipoDeItens(dados) {
+  if (!dados) return [];
+  const doTitulo = (t) => {
+    const s = String(t || '').toLowerCase();
+    if (s.startsWith('instala')) return 'instalacao';
+    if (s.startsWith('manuten')) return 'manutencao';
+    if (s.startsWith('higieniza')) return 'higienizacao';
+    return null;
+  };
+  const tipos = [];
+  if (Array.isArray(dados.items)) {
+    dados.items.forEach(it => {
+      const t = FIN_TIPOS_SIMPLES.includes(it.tipo) ? it.tipo : doTitulo(it.titulo);
+      if (t) tipos.push(t);
+    });
+  } else if (FIN_TIPOS_SIMPLES.includes(dados.tipo)) {
+    tipos.push(dados.tipo);
+  }
+  return tipos;
+}
+
+function finClassificarOS(o, tiposPorOrcamento) {
+  if (o.contrato_id) return 'pmoc';
+  let tipos = finTipoDeItens(o.dados);
+  if (!tipos.length && o.orcamento_id && tiposPorOrcamento && tiposPorOrcamento[o.orcamento_id]) tipos = tiposPorOrcamento[o.orcamento_id];
+  if (!tipos.length) return 'outro';
+  return tipos.every(t => t === tipos[0]) ? tipos[0] : 'misto';
+}
+
+// OS antigas sem snapshot de itens: busca o tipo direto no orçamento de origem (em lotes pequenos).
+async function finCarregarTiposOrcamentos(listaOS) {
+  const ids = [...new Set(listaOS
+    .filter(o => !o.contrato_id && o.orcamento_id && !finTipoDeItens(o.dados).length)
+    .map(o => o.orcamento_id))];
+  const mapa = {};
+  for (let i = 0; i < ids.length; i += 40) {
+    try {
+      const { data } = await supabaseClient.from('orcamentos').select('id,dados').in('id', ids.slice(i, i + 40));
+      (data || []).forEach(r => { const t = finTipoDeItens(r.dados); if (t.length) mapa[r.id] = t; });
+    } catch (e) { console.warn('Não foi possível ler o tipo de serviço de alguns orçamentos:', e); }
+  }
+  return mapa;
+}
+
+function finLinkCobranca(o, tipoChave, dias) {
+  const tel = String((o.clientes && o.clientes.telefone) || '').replace(/\D/g, '');
+  if (tel.length < 10) return null;
+  const numero = (tel.startsWith('55') && tel.length >= 12) ? tel : '55' + tel;
+  const primeiroNome = o.clientes && o.clientes.nome ? String(o.clientes.nome).trim().split(/\s+/)[0] : '';
+  const servico = FIN_TIPOS_SIMPLES.includes(tipoChave) ? 'do serviço de ' + finTipoInfo(tipoChave).label.toLowerCase() : 'do serviço realizado';
+  const quando = dias > 0 ? ' (concluído há ' + dias + ' dia' + (dias === 1 ? '' : 's') + ')' : '';
+  const texto = `Olá${primeiroNome ? ', ' + primeiroNome : ''}! Tudo bem? Passando para lembrar do pagamento ${servico}${quando}, no valor de ${money(parseFloat(o.valor) || 0)}. Qualquer dúvida é só me chamar. Obrigado! — ${empresaAtual.nome_empresa}`;
+  return `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
+}
+
+const FIN_DESP_CATEGORIAS = [
+  { chave: 'material', label: 'Material e peças', cor: '#2563eb' },
+  { chave: 'combustivel', label: 'Combustível', cor: '#F2734A' },
+  { chave: 'mao_de_obra', label: 'Mão de obra / ajudante', cor: '#16a34a' },
+  { chave: 'ferramentas', label: 'Ferramentas e equipamentos', cor: '#7c3aed' },
+  { chave: 'veiculo', label: 'Veículo e manutenção', cor: '#0891b2' },
+  { chave: 'taxas', label: 'Taxas e impostos', cor: '#dc2626' },
+  { chave: 'marketing', label: 'Marketing', cor: '#d97706' },
+  { chave: 'outros', label: 'Outros', cor: '#94a3b8' }
+];
+const FIN_DESP_FORMAS = [
+  { chave: 'pix', label: 'PIX' },
+  { chave: 'dinheiro', label: 'Dinheiro' },
+  { chave: 'cartao', label: 'Cartão' },
+  { chave: 'boleto', label: 'Boleto' },
+  { chave: 'outro', label: 'Outro' }
+];
+function finDespCategoria(chave) { return FIN_DESP_CATEGORIAS.find(c => c.chave === chave) || FIN_DESP_CATEGORIAS[FIN_DESP_CATEGORIAS.length - 1]; }
+// Datas "YYYY-MM-DD" sem fuso: interpreta como dia local (evita cair no dia anterior no Brasil)
+function finParseDataLocal(str) {
+  const p = String(str || '').slice(0, 10).split('-').map(Number);
+  return new Date(p[0] || 1970, (p[1] || 1) - 1, p[2] || 1);
+}
+function finHojeISO() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+let _finChartMeses = null, _finChartTipos = null;
+function finDestruirGraficos() {
+  if (_finChartMeses) { _finChartMeses.destroy(); _finChartMeses = null; }
+  if (_finChartTipos) { _finChartTipos.destroy(); _finChartTipos = null; }
+}
+
+async function abrirFinanceiroDetalhado(mesOffset = 0, filtro = 'todos', tipo = 'todos') {
   const conteudo = document.getElementById('conteudo');
+  finDestruirGraficos();
   conteudo.innerHTML = '<div class="card"><p class="vazio">Carregando...</p></div>';
 
-  const { data: osData } = await supabaseClient.from('ordens_servico')
-    .select('id,status,valor,pago,data_pagamento,descricao,created_at,clientes(nome),agenda(data_hora)')
+  const { data: osData, error: erroOS } = await supabaseClient.from('ordens_servico')
+    .select('id,status,valor,pago,data_pagamento,descricao,created_at,orcamento_id,contrato_id,dados,clientes(nome,telefone),agenda(data_hora)')
     .eq('empresa_id', empresaAtual.id)
     .order('created_at', { ascending: false });
-  const os = osData || [];
+  if (erroOS) {
+    conteudo.innerHTML = '<div class="card"><p class="vazio">Não foi possível carregar o financeiro. Verifique a conexão e tente de novo.</p></div><span class="voltar-link" id="btnVoltarInicio">← Voltar pro Início</span>';
+    document.getElementById('btnVoltarInicio').addEventListener('click', renderInicio);
+    return;
+  }
+  const osBruta = osData || [];
+  // Despesas ficam em tabela própria; se ela ainda não existir no banco, a tela segue funcionando sem elas
+  const { data: despData, error: erroDesp } = await supabaseClient.from('despesas')
+    .select('*').eq('empresa_id', empresaAtual.id).order('data_despesa', { ascending: false }).limit(5000);
+  const despesasIndisponivel = !!erroDesp;
+  const despesas = (despData || []).map(d => Object.assign({}, d, { _data: finParseDataLocal(d.data_despesa), _valor: parseFloat(d.valor) || 0 }));
+  const tiposPorOrcamento = await finCarregarTiposOrcamentos(osBruta);
+  const osTodas = osBruta.map(o => Object.assign({}, o, { _tipo: finClassificarOS(o, tiposPorOrcamento) }));
 
+  const valorDe = (o) => parseFloat(o.valor) || 0;
+  const soma = (lista) => lista.reduce((s, o) => s + valorDe(o), 0);
   const hoje = new Date();
+  const hojeSemHora = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
   const refMes = new Date(hoje.getFullYear(), hoje.getMonth() + mesOffset, 1);
   const labelMes = refMes.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
   const mesmoMes = (data, ref) => data.getMonth() === ref.getMonth() && data.getFullYear() === ref.getFullYear();
   // Data de execução do serviço (compromisso vinculado na agenda); se não houver, usa a data de criação da OS
   const dataExecucaoOS = (o) => o.agenda?.data_hora ? new Date(o.agenda.data_hora) : new Date(o.created_at);
+  const diasDesde = (data) => Math.max(0, Math.floor((hojeSemHora - new Date(data.getFullYear(), data.getMonth(), data.getDate())) / 86400000));
+  const ehAReceber = (o) => o.status === 'concluida' && !o.pago;
 
-  const osDoMes = os.filter(o => {
-    const dataRef = o.pago && o.data_pagamento ? new Date(o.data_pagamento) : dataExecucaoOS(o);
-    return mesmoMes(dataRef, refMes);
+  // Filtro por tipo de serviço vale pra tudo na tela (números, lista e gráficos), menos a pizza de tipos
+  const tiposComDados = new Set(osTodas.map(o => o._tipo));
+  if (tipo !== 'todos' && !FIN_TIPOS.some(t => t.chave === tipo)) tipo = 'todos';
+  const base = tipo === 'todos' ? osTodas : osTodas.filter(o => o._tipo === tipo);
+
+  const dataRefMes = (o) => (o.pago && o.data_pagamento) ? new Date(o.data_pagamento) : dataExecucaoOS(o);
+  const aplicaStatus = (lista) => ({
+    todos: lista,
+    pago: lista.filter(o => o.pago),
+    a_receber: lista.filter(ehAReceber),
+    em_execucao: lista.filter(o => o.status !== 'concluida')
+  }[filtro] || lista);
+
+  const osMesBase = base.filter(o => mesmoMes(dataRefMes(o), refMes));
+  // "A receber" lista tudo que está em aberto, de qualquer mês (o atraso é justamente o que importa cobrar);
+  // os outros filtros olham só o mês escolhido.
+  const listaFiltrada = filtro === 'a_receber' ? base.filter(ehAReceber) : aplicaStatus(osMesBase);
+  if (filtro === 'a_receber') listaFiltrada.sort((a, b) => dataExecucaoOS(a) - dataExecucaoOS(b));
+  const totalFiltrado = soma(listaFiltrada);
+
+  // Indicadores do topo
+  const pagasNoMes = (lista, ref) => lista.filter(o => o.pago && o.data_pagamento && mesmoMes(new Date(o.data_pagamento), ref));
+  const mesAnteriorRef = new Date(refMes.getFullYear(), refMes.getMonth() - 1, 1);
+  const recebidoMes = soma(pagasNoMes(base, refMes));
+  const recebidoAnterior = soma(pagasNoMes(base, mesAnteriorRef));
+  const qtdPagasMes = pagasNoMes(base, refMes).length;
+  const ticketMedio = qtdPagasMes ? recebidoMes / qtdPagasMes : 0;
+  const variacao = recebidoAnterior > 0 ? Math.round(((recebidoMes - recebidoAnterior) / recebidoAnterior) * 100) : null;
+  const aReceberLista = base.filter(ehAReceber);
+  const aReceberTotal = soma(aReceberLista);
+  const emExecucaoTotal = soma(base.filter(o => o.status !== 'concluida'));
+
+  const variacaoHtml = variacao === null ? '' :
+    `<span style="color:${variacao >= 0 ? 'var(--sucesso)' : 'var(--erro)'}; font-weight:700; font-size:11px;">${variacao >= 0 ? '↑' : '↓'} ${Math.abs(variacao)}% vs mês anterior</span>`;
+  const kpi = (titulo, valor, cor, extra) => `
+    <div style="border:1.5px solid var(--cinza-linha); border-radius:12px; padding:10px 12px;">
+      <div style="font-size:11px; color:var(--cinza-texto); text-transform:uppercase; font-weight:700;">${titulo}</div>
+      <div style="font-family:'Manrope',sans-serif; font-weight:800; font-size:19px; color:${cor}; margin-top:2px;">${valor}</div>
+      <div style="min-height:15px;">${extra || ''}</div>
+    </div>`;
+  // Despesas não têm tipo de serviço: com filtro de tipo ligado, escondemos despesas/lucro pra não induzir a erro
+  const mostraDespesas = tipo === 'todos' && !despesasIndisponivel;
+  const despesasMes = despesas.filter(d => mesmoMes(d._data, refMes));
+  const totalDespesasMes = despesasMes.reduce((s, d) => s + d._valor, 0);
+  const lucroMes = recebidoMes - totalDespesasMes;
+  const subKpi = (t) => `<span style="font-size:11px; color:var(--cinza-texto);">${t}</span>`;
+  const kpisHtml = `
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px;">
+      ${kpi('Recebido no mês', money(recebidoMes), 'var(--sucesso)', variacaoHtml)}
+      ${mostraDespesas ? kpi('Despesas no mês', money(totalDespesasMes), 'var(--erro)', subKpi(despesasMes.length + ' lançamento(s)')) : ''}
+      ${mostraDespesas ? kpi('Lucro no mês', money(lucroMes), lucroMes >= 0 ? 'var(--sucesso)' : 'var(--erro)', subKpi('recebido − despesas')) : ''}
+      ${kpi('A receber (total)', money(aReceberTotal), 'var(--ambar-escuro)', subKpi(aReceberLista.length + ' OS concluída(s) sem pagamento'))}
+      ${kpi('Ticket médio', money(ticketMedio), 'var(--escuro)', subKpi(qtdPagasMes + ' OS paga(s) no mês'))}
+      ${kpi('Em execução', money(emExecucaoTotal), 'var(--cinza-texto)', subKpi('OS abertas ou em andamento'))}
+    </div>`;
+
+  // Atraso do que ainda não foi pago (conta a partir da data do serviço)
+  const faixas = [
+    { label: '0 a 7 dias', min: 0, max: 7, cor: 'var(--sucesso)' },
+    { label: '8 a 30 dias', min: 8, max: 30, cor: 'var(--ambar-escuro)' },
+    { label: 'Mais de 30 dias', min: 31, max: Infinity, cor: 'var(--erro)' }
+  ].map(f => {
+    const itens = aReceberLista.filter(o => { const d = diasDesde(dataExecucaoOS(o)); return d >= f.min && d <= f.max; });
+    return Object.assign({}, f, { qtd: itens.length, total: soma(itens) });
   });
+  const atrasoHtml = aReceberLista.length ? `
+    <div class="card">
+      <div class="card-titulo"><h3>A receber por tempo de espera</h3></div>
+      ${faixas.map(f => `
+        <div class="lista-item">
+          <div class="info"><div class="titulo-item">${f.label}</div><div class="sub-item">${f.qtd} OS</div></div>
+          <span style="font-weight:800; color:${f.cor}; font-family:'Manrope',sans-serif;">${money(f.total)}</span>
+        </div>`).join('')}
+    </div>` : '';
 
-  const porFiltro = {
-    todos: osDoMes,
-    pago: osDoMes.filter(o => o.pago),
-    a_receber: osDoMes.filter(o => o.status === 'concluida' && !o.pago),
-    em_execucao: osDoMes.filter(o => o.status !== 'concluida')
-  };
-  const listaFiltrada = porFiltro[filtro] || osDoMes;
-  const totalFiltrado = listaFiltrada.reduce((s, o) => s + (parseFloat(o.valor) || 0), 0);
-
-  // Comparativo dos últimos 6 meses (recebido x em aberto)
+  // Gráfico: recebido x a receber nos últimos 6 meses (respeita o filtro de tipo)
   const meses = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
-    const recebido = os.filter(o => o.pago && o.data_pagamento && mesmoMes(new Date(o.data_pagamento), d)).reduce((s, o) => s + (parseFloat(o.valor) || 0), 0);
-    const aberto = os.filter(o => !o.pago && mesmoMes(dataExecucaoOS(o), d)).reduce((s, o) => s + (parseFloat(o.valor) || 0), 0);
-    meses.push({ label: d.toLocaleDateString('pt-BR', { month: 'short' }), recebido, aberto });
+    meses.push({
+      label: d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''),
+      recebido: soma(pagasNoMes(base, d)),
+      aReceber: soma(base.filter(o => ehAReceber(o) && mesmoMes(dataExecucaoOS(o), d))),
+      despesas: despesas.filter(x => mesmoMes(x._data, d)).reduce((acc, x) => acc + x._valor, 0)
+    });
   }
-  const maxValor = Math.max(1, ...meses.map(m => Math.max(m.recebido, m.aberto)));
 
-  const graficoHtml = `
-    <div style="display:flex; align-items:flex-end; gap:8px; height:120px; margin:10px 0 4px;">
-      ${meses.map(m => `
-        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; height:100%; justify-content:flex-end;">
-          <div style="display:flex; align-items:flex-end; gap:2px; height:100%;">
-            <div title="Recebido: ${money(m.recebido)}" style="width:9px; background:var(--sucesso); border-radius:3px 3px 0 0; height:${Math.max(3, (m.recebido / maxValor) * 100)}%;"></div>
-            <div title="Em aberto: ${money(m.aberto)}" style="width:9px; background:var(--ambar); border-radius:3px 3px 0 0; height:${Math.max(3, (m.aberto / maxValor) * 100)}%;"></div>
+  // Gráfico: faturamento do mês por tipo de serviço (respeita o filtro de status, não o de tipo)
+  const osMesTodosTipos = filtro === 'a_receber'
+    ? osTodas.filter(ehAReceber)
+    : aplicaStatus(osTodas.filter(o => mesmoMes(dataRefMes(o), refMes)));
+  const porTipo = FIN_TIPOS
+    .map(t => Object.assign({}, t, { total: soma(osMesTodosTipos.filter(o => o._tipo === t.chave)) }))
+    .filter(t => t.total > 0);
+
+  let despesasHtml;
+  if (despesasIndisponivel) {
+    despesasHtml = `
+    <div class="card">
+      <div class="card-titulo"><h3>Despesas</h3></div>
+      <p class="vazio">As despesas ainda não foram ativadas nesta conta. Rode o arquivo SQL de despesas no Supabase e abra esta tela de novo.</p>
+    </div>`;
+  } else {
+    const porCategoria = FIN_DESP_CATEGORIAS
+      .map(c => Object.assign({}, c, { total: despesasMes.filter(d => d.categoria === c.chave || (c.chave === 'outros' && !FIN_DESP_CATEGORIAS.some(x => x.chave === d.categoria))).reduce((acc, d) => acc + d._valor, 0) }))
+      .filter(c => c.total > 0)
+      .sort((a, b) => b.total - a.total);
+    const categoriasHtml = porCategoria.length ? `
+      <div style="margin:14px 0 6px;">
+        ${porCategoria.map(c => {
+          const pct = totalDespesasMes > 0 ? Math.round((c.total / totalDespesasMes) * 100) : 0;
+          return `<div style="margin-bottom:9px;">
+            <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--cinza-texto);"><span>${esc(c.label)}</span><span>${money(c.total)} · ${pct}%</span></div>
+            <div style="height:6px; border-radius:4px; background:var(--cinza-linha); margin-top:3px;"><div style="height:100%; width:${pct}%; border-radius:4px; background:${c.cor};"></div></div>
+          </div>`;
+        }).join('')}
+      </div>` : '';
+    const linhasDesp = despesasMes.length ? despesasMes.map(d => {
+      const cat = finDespCategoria(d.categoria);
+      const forma = FIN_DESP_FORMAS.find(f => f.chave === d.forma_pagamento);
+      return `
+        <div class="lista-item" style="cursor:pointer;" data-desp-editar="${esc(d.id)}">
+          <div class="info">
+            <div class="titulo-item">${esc(d.descricao)}</div>
+            <div class="sub-item">${esc(cat.label)} · ${d._data.toLocaleDateString('pt-BR')}${forma ? ' · ' + esc(forma.label) : ''}</div>
           </div>
-          <span style="font-size:10px; color:var(--cinza-texto); text-transform:capitalize;">${esc(m.label)}</span>
+          <span style="font-weight:800; color:var(--erro); font-family:'Manrope',sans-serif;">${money(d._valor)}</span>
+          <div class="acoes"><button class="icon-btn perigo" data-desp-del="${esc(d.id)}" title="Excluir despesa">✕</button></div>
+        </div>`;
+    }).join('') : '<p class="vazio">Nenhuma despesa lançada nesse mês.</p>';
+    despesasHtml = `
+    <div class="card" id="despCard">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div class="card-titulo" style="margin-bottom:0;"><h3>Despesas — <span style="text-transform:capitalize;">${esc(labelMes)}</span></h3></div>
+        <button class="btn btn-secundario" id="despNovaBtn" style="width:auto; padding:6px 14px; font-size:13px; margin:0;">+ Nova</button>
+      </div>
+      <div style="text-align:center; margin:14px 0 4px;">
+        <div style="font-size:12px; color:var(--cinza-texto); text-transform:uppercase; font-weight:600;">Total do mês</div>
+        <div style="font-size:24px; font-weight:800; font-family:'Manrope',sans-serif; color:var(--erro);">${money(totalDespesasMes)}</div>
+      </div>
+      <div class="hidden" id="despForm" style="margin:12px 0; padding:12px; border:1.5px solid var(--cinza-linha); border-radius:12px;">
+        <label>Descrição</label><input type="text" id="despDesc" placeholder="Ex.: gás R410A, gasolina, tubo de cobre">
+        <label>Valor (R$)</label><input type="number" id="despValor" step="0.01" min="0" inputmode="decimal" placeholder="0,00">
+        <label>Data</label><input type="date" id="despData">
+        <label>Categoria</label>
+        <select id="despCategoria">${FIN_DESP_CATEGORIAS.map(c => `<option value="${c.chave}">${esc(c.label)}</option>`).join('')}</select>
+        <label>Forma de pagamento</label>
+        <select id="despForma"><option value="">— opcional —</option>${FIN_DESP_FORMAS.map(f => `<option value="${f.chave}">${esc(f.label)}</option>`).join('')}</select>
+        <label>Observações</label><input type="text" id="despObs" placeholder="Opcional">
+        <div class="msg" id="despMsg"></div>
+        <div class="action-row">
+          <button class="btn" id="despSalvarBtn">Salvar despesa</button>
+          <button class="btn btn-secundario" id="despCancelarBtn">Cancelar</button>
         </div>
-      `).join('')}
-    </div>
-    <div style="display:flex; gap:14px; justify-content:center; margin-top:6px; font-size:11px; color:var(--cinza-texto);">
-      <span><span style="display:inline-block; width:8px; height:8px; border-radius:2px; background:var(--sucesso); margin-right:4px;"></span>Recebido</span>
-      <span><span style="display:inline-block; width:8px; height:8px; border-radius:2px; background:var(--ambar); margin-right:4px;"></span>Em aberto</span>
-    </div>
-  `;
+      </div>
+      ${categoriasHtml}
+      ${linhasDesp}
+    </div>`;
+  }
 
   const filtroAtual = FINANCEIRO_FILTROS.find(f => f.chave === filtro) || FINANCEIRO_FILTROS[0];
+  const tipoAtualInfo = tipo === 'todos' ? null : finTipoInfo(tipo);
+  const estiloChip = (ativo) => `cursor:pointer; border:1.5px solid var(--cinza-linha); white-space:nowrap; background:${ativo ? 'var(--azul-tinta)' : 'var(--superficie)'}; color:${ativo ? 'var(--azul-escuro)' : 'var(--cinza-texto)'};`;
+  const tiposVisiveis = FIN_TIPOS.filter(t => tiposComDados.has(t.chave) || t.chave === tipo);
+
+  const linhaOS = (o) => {
+    const info = finTipoInfo(o._tipo);
+    const dias = diasDesde(dataExecucaoOS(o));
+    const linkCobranca = ehAReceber(o) ? finLinkCobranca(o, o._tipo, dias) : null;
+    const tagStatus = o.pago
+      ? '<span class="status-tag status-concluido">Pago</span>'
+      : (o.status === 'concluida'
+        ? `<span class="status-tag status-cancelado">A receber${dias > 0 ? ' · há ' + dias + ' dia' + (dias === 1 ? '' : 's') : ''}</span>`
+        : '<span class="status-tag status-agendado">Em execução</span>');
+    return `
+      <div class="lista-item" style="cursor:pointer;" data-kb-os="${o.id}">
+        <div class="info">
+          <div class="titulo-item">${esc(o.clientes ? o.clientes.nome : (o.descricao || 'Ordem de serviço'))}</div>
+          <div class="sub-item"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${info.cor}; margin-right:5px;"></span>${esc(info.label)} · ${money(valorDe(o))}</div>
+          ${tagStatus}
+        </div>
+        ${ehAReceber(o) ? (linkCobranca
+          ? `<a href="${linkCobranca}" target="_blank" rel="noopener" data-cobrar class="status-tag" style="background:var(--sucesso-bg); color:var(--sucesso); text-decoration:none; font-weight:700;">Cobrar</a>`
+          : '<span class="sub-item" style="font-size:11px;">sem telefone</span>') : ''}
+      </div>`;
+  };
 
   conteudo.innerHTML = `
     <div class="topo" style="margin-bottom:14px;">
@@ -1882,34 +2196,155 @@ async function abrirFinanceiroDetalhado(mesOffset = 0, filtro = 'todos') {
         <b style="text-transform:capitalize;">${esc(labelMes)}</b>
         <button class="icon-btn" id="btnMesProximo" ${mesOffset >= 0 ? 'disabled style="opacity:.3;"' : ''}>›</button>
       </div>
-      <div style="display:flex; gap:6px; flex-wrap:wrap; margin:14px 0 4px;">
-        ${FINANCEIRO_FILTROS.map(f => `<button class="status-tag" data-filtro="${f.chave}" style="cursor:pointer; border:1.5px solid var(--cinza-linha); background:${f.chave === filtro ? 'var(--azul-tinta)' : 'var(--superficie)'}; color:${f.chave === filtro ? 'var(--azul-escuro)' : 'var(--cinza-texto)'};">${f.label}</button>`).join('')}
+      ${kpisHtml}
+      <div style="font-size:11px; color:var(--cinza-texto); text-transform:uppercase; font-weight:700; margin:16px 0 6px;">Situação</div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+        ${FINANCEIRO_FILTROS.map(f => `<button class="status-tag" data-filtro="${f.chave}" style="${estiloChip(f.chave === filtro)}">${f.label}</button>`).join('')}
       </div>
-      <div style="margin:14px 0; text-align:center;">
-        <div style="font-size:12px; color:var(--cinza-texto); text-transform:uppercase; font-weight:600;">${filtroAtual.label} em ${esc(labelMes)}</div>
+      <div style="font-size:11px; color:var(--cinza-texto); text-transform:uppercase; font-weight:700; margin:14px 0 6px;">Tipo de serviço</div>
+      <div style="display:flex; gap:6px; overflow-x:auto; padding-bottom:4px;">
+        <button class="status-tag" data-tipo="todos" style="${estiloChip(tipo === 'todos')}">Todos</button>
+        ${tiposVisiveis.map(t => `<button class="status-tag" data-tipo="${t.chave}" style="${estiloChip(t.chave === tipo)}">${esc(t.label)}</button>`).join('')}
+      </div>
+      <div style="margin:16px 0; text-align:center;">
+        <div style="font-size:12px; color:var(--cinza-texto); text-transform:uppercase; font-weight:600;">${esc(filtroAtual.label)}${tipoAtualInfo ? ' · ' + esc(tipoAtualInfo.label) : ''} ${filtro === 'a_receber' ? '— todos os meses' : 'em ' + esc(labelMes)}</div>
         <div style="font-size:28px; font-weight:800; font-family:'Manrope',sans-serif; color:var(--escuro);">${money(totalFiltrado)}</div>
+        <div style="font-size:12px; color:var(--cinza-texto);">${listaFiltrada.length} OS</div>
       </div>
-      ${listaFiltrada.length ? listaFiltrada.map(o => `
-        <div class="lista-item" style="cursor:pointer;" data-kb-os="${o.id}">
-          <div class="info">
-            <div class="titulo-item">${esc(o.clientes ? o.clientes.nome : (o.descricao || 'Ordem de serviço'))}</div>
-            <div class="sub-item">${esc(o.descricao || '')} · ${money(o.valor || 0)}</div>
-            ${o.pago ? '<span class="status-tag status-concluido">Pago</span>' : (o.status === 'concluida' ? '<span class="status-tag status-cancelado">A receber</span>' : '<span class="status-tag status-agendado">Em execução</span>')}
-          </div>
-        </div>
-      `).join('') : '<p class="vazio">Nenhuma OS nesse período.</p>'}
+      ${listaFiltrada.length ? listaFiltrada.map(linhaOS).join('') : '<p class="vazio">Nenhuma OS nesse período.</p>'}
+    </div>
+    ${atrasoHtml}
+    ${despesasHtml}
+    <div class="card">
+      <div class="card-titulo"><h3>${mostraDespesas ? 'Recebido, despesas e lucro — 6 meses' : 'Recebido x a receber — 6 meses'}</h3></div>
+      ${window.Chart ? '<div style="position:relative; height:220px;"><canvas id="finGraficoMeses"></canvas></div>' : '<p class="vazio">Gráfico indisponível sem conexão.</p>'}
     </div>
     <div class="card">
-      <div class="card-titulo"><h3>Últimos 6 meses</h3></div>
-      ${graficoHtml}
+      <div class="card-titulo"><h3>Por tipo de serviço — ${filtro === 'a_receber' ? 'em aberto' : esc(labelMes)}</h3></div>
+      ${!window.Chart ? '<p class="vazio">Gráfico indisponível sem conexão.</p>'
+        : (porTipo.length ? '<div style="position:relative; height:240px;"><canvas id="finGraficoTipos"></canvas></div><p class="note" style="text-align:center; margin-top:8px;">Toque numa fatia pra filtrar por esse tipo.</p>'
+          : '<p class="vazio">Sem valores nesse período.</p>')}
     </div>
     <span class="voltar-link" id="btnVoltarInicio">← Voltar pro Início</span>
   `;
 
-  document.getElementById('btnMesAnterior').addEventListener('click', () => abrirFinanceiroDetalhado(mesOffset - 1, filtro));
-  if (mesOffset < 0) document.getElementById('btnMesProximo').addEventListener('click', () => abrirFinanceiroDetalhado(mesOffset + 1, filtro));
-  conteudo.querySelectorAll('[data-filtro]').forEach(el => el.addEventListener('click', () => abrirFinanceiroDetalhado(mesOffset, el.getAttribute('data-filtro'))));
-  document.getElementById('btnVoltarInicio').addEventListener('click', renderInicio);
+  if (window.Chart) {
+    const cores = finCoresGrafico();
+    const elMeses = document.getElementById('finGraficoMeses');
+    if (elMeses) {
+      _finChartMeses = new Chart(elMeses, {
+        type: 'bar',
+        data: {
+          labels: meses.map(m => m.label),
+          datasets: [
+            { label: 'Recebido', data: meses.map(m => m.recebido), backgroundColor: '#16a34a', borderRadius: 5, maxBarThickness: 28 },
+            { label: 'A receber', data: meses.map(m => m.aReceber), backgroundColor: '#F2734A', borderRadius: 5, maxBarThickness: 28 }
+          ].concat(mostraDespesas ? [
+            { label: 'Despesas', data: meses.map(m => m.despesas), backgroundColor: '#ef4444', borderRadius: 5, maxBarThickness: 28 },
+            { type: 'line', label: 'Lucro', data: meses.map(m => m.recebido - m.despesas), borderColor: '#2563eb', backgroundColor: '#2563eb', borderWidth: 2, tension: 0.3, pointRadius: 3 }
+          ] : [])
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { color: cores.texto, usePointStyle: true, boxWidth: 8 } },
+            tooltip: { callbacks: { label: (ctx) => ' ' + ctx.dataset.label + ': ' + money(ctx.parsed.y || 0) } }
+          },
+          scales: {
+            x: { ticks: { color: cores.texto }, grid: { display: false } },
+            y: { beginAtZero: true, ticks: { color: cores.texto, callback: (v) => finMoedaCurta(v) }, grid: { color: cores.linha } }
+          }
+        }
+      });
+    }
+    const elTipos = document.getElementById('finGraficoTipos');
+    if (elTipos) {
+      const totalGeral = porTipo.reduce((s, t) => s + t.total, 0) || 1;
+      _finChartTipos = new Chart(elTipos, {
+        type: 'doughnut',
+        data: {
+          labels: porTipo.map(t => t.label),
+          datasets: [{ data: porTipo.map(t => t.total), backgroundColor: porTipo.map(t => t.cor), borderWidth: 2, borderColor: getComputedStyle(document.body).getPropertyValue('--superficie').trim() || '#fff' }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '58%',
+          plugins: {
+            legend: { position: 'bottom', labels: { color: cores.texto, usePointStyle: true, boxWidth: 8 } },
+            tooltip: { callbacks: { label: (ctx) => ' ' + ctx.label + ': ' + money(ctx.parsed || 0) + ' (' + Math.round((ctx.parsed / totalGeral) * 100) + '%)' } }
+          },
+          onClick: (evt, els) => {
+            if (els && els.length) abrirFinanceiroDetalhado(mesOffset, filtro, porTipo[els[0].index].chave);
+          }
+        }
+      });
+    }
+  }
+
+  document.getElementById('btnMesAnterior').addEventListener('click', () => abrirFinanceiroDetalhado(mesOffset - 1, filtro, tipo));
+  if (mesOffset < 0) document.getElementById('btnMesProximo').addEventListener('click', () => abrirFinanceiroDetalhado(mesOffset + 1, filtro, tipo));
+  conteudo.querySelectorAll('[data-filtro]').forEach(el => el.addEventListener('click', () => abrirFinanceiroDetalhado(mesOffset, el.getAttribute('data-filtro'), tipo)));
+  conteudo.querySelectorAll('[data-tipo]').forEach(el => el.addEventListener('click', () => abrirFinanceiroDetalhado(mesOffset, filtro, el.getAttribute('data-tipo'))));
+  // Botão "Cobrar" abre o WhatsApp sem abrir a OS por baixo
+  conteudo.querySelectorAll('[data-cobrar]').forEach(el => el.addEventListener('click', (e) => e.stopPropagation()));
+  if (!despesasIndisponivel) {
+    let despEditandoId = null;
+    const formEl = document.getElementById('despForm');
+    const abrirForm = (d) => {
+      despEditandoId = d ? d.id : null;
+      document.getElementById('despDesc').value = d ? d.descricao : '';
+      document.getElementById('despValor').value = d ? d._valor : '';
+      document.getElementById('despData').value = d ? String(d.data_despesa).slice(0, 10) : finHojeISO();
+      document.getElementById('despCategoria').value = d && FIN_DESP_CATEGORIAS.some(c => c.chave === d.categoria) ? d.categoria : 'material';
+      document.getElementById('despForma').value = d && d.forma_pagamento ? d.forma_pagamento : '';
+      document.getElementById('despObs').value = d && d.observacoes ? d.observacoes : '';
+      document.getElementById('despMsg').textContent = '';
+      formEl.classList.remove('hidden');
+      formEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+    const salvarDespesa = async () => {
+      const msg = document.getElementById('despMsg');
+      const descricao = document.getElementById('despDesc').value.trim();
+      const valor = parseFloat(document.getElementById('despValor').value);
+      const dataDesp = document.getElementById('despData').value;
+      if (!descricao) { msg.className = 'msg erro'; msg.textContent = 'Informe a descrição.'; marcarCampoInvalido(document.getElementById('despDesc')); return; }
+      if (!(valor > 0)) { msg.className = 'msg erro'; msg.textContent = 'Informe um valor maior que zero.'; marcarCampoInvalido(document.getElementById('despValor')); return; }
+      if (!dataDesp) { msg.className = 'msg erro'; msg.textContent = 'Informe a data.'; marcarCampoInvalido(document.getElementById('despData')); return; }
+      const payload = {
+        empresa_id: empresaAtual.id,
+        descricao,
+        categoria: document.getElementById('despCategoria').value,
+        valor: Math.round(valor * 100) / 100,
+        data_despesa: dataDesp,
+        forma_pagamento: document.getElementById('despForma').value || null,
+        observacoes: document.getElementById('despObs').value.trim() || null
+      };
+      const { error } = despEditandoId
+        ? await supabaseClient.from('despesas').update(payload).eq('id', despEditandoId)
+        : await supabaseClient.from('despesas').insert(payload);
+      if (error) { console.error('Erro ao salvar despesa:', error); msg.className = 'msg erro'; msg.textContent = 'Não foi possível salvar a despesa. Confira a conexão e se o SQL de despesas já foi rodado.'; return; }
+      mostrarToast('Despesa salva.', 'sucesso');
+      await abrirFinanceiroDetalhado(mesOffset, filtro, tipo);
+    };
+    document.getElementById('despNovaBtn').addEventListener('click', () => abrirForm(null));
+    document.getElementById('despCancelarBtn').addEventListener('click', () => formEl.classList.add('hidden'));
+    document.getElementById('despSalvarBtn').addEventListener('click', (e) => comCarregamento(e.currentTarget, salvarDespesa));
+    conteudo.querySelectorAll('[data-desp-editar]').forEach(el => el.addEventListener('click', () => {
+      const d = despesas.find(x => String(x.id) === el.getAttribute('data-desp-editar'));
+      if (d) abrirForm(d);
+    }));
+    conteudo.querySelectorAll('[data-desp-del]').forEach(el => el.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!(await confirmarAcao('Excluir esta despesa? Essa ação não pode ser desfeita.', { titulo: 'Excluir despesa', textoConfirmar: 'Excluir' }))) return;
+      const { data, error } = await supabaseClient.from('despesas').delete().eq('id', el.getAttribute('data-desp-del')).select('id');
+      if (error || !data || !data.length) { mostrarToast('Erro ao excluir a despesa.', 'erro'); return; }
+      mostrarToast('Despesa excluída.', 'sucesso');
+      await abrirFinanceiroDetalhado(mesOffset, filtro, tipo);
+    }));
+  }
+  document.getElementById('btnVoltarInicio').addEventListener('click', () => { finDestruirGraficos(); renderInicio(); });
   ligarCliquesKanban(conteudo);
 }
 
@@ -2251,6 +2686,7 @@ async function clVerDetalhes(id) {
                 ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg>'
                 : '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'}
             </button>
+            <button class="icon-btn perigo" data-del-equip="${eq.id}" title="Excluir equipamento">✕</button>
           </div>
         </div>`).join('')
     : '<p class="vazio">Nenhum equipamento cadastrado ainda.</p>';
@@ -2355,7 +2791,7 @@ async function clVerDetalhes(id) {
   document.getElementById('eqSalvarBtn').addEventListener('click', (e) => comCarregamento(e.currentTarget, () => eqSalvarNovo(id)));
   conteudo.querySelectorAll('[data-ver-equipamento]').forEach(item => {
     item.addEventListener('click', (e) => {
-      if (e.target.closest('[data-toggle-equip]')) return;
+      if (e.target.closest('[data-toggle-equip],[data-del-equip]')) return;
       eqVerDetalhes(item.getAttribute('data-ver-equipamento'));
     });
   });
@@ -2364,6 +2800,13 @@ async function clVerDetalhes(id) {
       e.stopPropagation();
       await eqToggleAtivo(btn.getAttribute('data-toggle-equip'), btn.getAttribute('data-ativo') === 'true');
       await clVerDetalhes(id);
+    });
+  });
+  conteudo.querySelectorAll('[data-del-equip]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const excluiu = await eqExcluir(btn.getAttribute('data-del-equip'));
+      if (excluiu) await clVerDetalhes(id);
     });
   });
 
@@ -2603,6 +3046,31 @@ async function eqToggleAtivo(equipamentoId, ativoAtual) {
   await supabaseClient.from('equipamentos').update({ ativo: !ativoAtual }).eq('id', equipamentoId);
 }
 
+// Exclusão definitiva (cadastro errado, por exemplo). Pra troca ou desinstalação, o botão de inativar
+// continua sendo o caminho que preserva o histórico.
+async function eqExcluir(equipamentoId) {
+  const confirmou = await confirmarAcao(
+    'Excluir este equipamento? O histórico de serviços dele também é apagado e ele deixa de aparecer nas ordens de serviço em que foi marcado (as OS não são apagadas). Se foi só uma troca ou desinstalação e você quer guardar o histórico, use "Marcar como inativo". Essa ação não pode ser desfeita.',
+    { titulo: 'Excluir equipamento', textoConfirmar: 'Excluir' }
+  );
+  if (!confirmou) return false;
+  // Tenta apagar direto; se o banco recusar por causa de registros ligados (23503), limpa os vínculos e tenta de novo.
+  const tentar = () => supabaseClient.from('equipamentos').delete().eq('id', equipamentoId).select('id');
+  let r = await tentar();
+  if (r.error && r.error.code === '23503') {
+    await supabaseClient.from('ordens_servico_equipamentos').delete().eq('equipamento_id', equipamentoId);
+    await supabaseClient.from('equipamento_historico').delete().eq('equipamento_id', equipamentoId);
+    r = await tentar();
+  }
+  if (r.error || !r.data || !r.data.length) {
+    console.error('Erro ao excluir equipamento:', r.error);
+    mostrarToast('Não foi possível excluir o equipamento. Confira se o SQL de exclusão já foi rodado no Supabase.', 'erro');
+    return false;
+  }
+  mostrarToast('Equipamento excluído.', 'sucesso');
+  return true;
+}
+
 async function eqVerDetalhes(equipamentoId) {
   const conteudo = document.getElementById("conteudo");
   conteudo.innerHTML = '<div class="card"><p class="vazio">Carregando...</p></div>';
@@ -2647,6 +3115,7 @@ function eqRenderDetalhe(eq, historico) {
       </div>
       <div class="action-row">
         <button class="btn btn-secundario" id="eqToggleAtivoBtn">${eq.ativo ? 'Marcar como inativo' : 'Reativar equipamento'}</button>
+        <button class="btn btn-perigo" id="eqExcluirBtn">Excluir equipamento</button>
       </div>
     </div>
     <div class="card">
@@ -2679,6 +3148,10 @@ function eqRenderDetalhe(eq, historico) {
   document.getElementById('eqToggleAtivoBtn').addEventListener('click', (e) => comCarregamento(e.currentTarget, async () => {
     await eqToggleAtivo(eq.id, eq.ativo);
     await eqVerDetalhes(eq.id);
+  }, ''));
+  document.getElementById('eqExcluirBtn').addEventListener('click', (e) => comCarregamento(e.currentTarget, async () => {
+    const excluiu = await eqExcluir(eq.id);
+    if (excluiu) await clVerDetalhes(eq.cliente_id);
   }, ''));
   document.getElementById('eqHistAbrirFormBtn').addEventListener('click', () => {
     document.getElementById('eqHistFormCard').classList.remove('hidden');
