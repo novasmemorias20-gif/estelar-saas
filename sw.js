@@ -2,7 +2,7 @@
 // Sobe esse número (ex: 'cosmos-v8') sempre que publicar uma atualização de painel.html/js,
 // senão quem já instalou o app pode continuar vendo a versão antiga por um tempo.
 // Atualize também o VERSAO_APP no topo do js/core.js (aparece na aba Ajustes).
-const CACHE_NOME = 'cosmos-v8';
+const CACHE_NOME = 'cosmos-v10';
 
 const ARQUIVOS_ESSENCIAIS = [
   './painel.html',
