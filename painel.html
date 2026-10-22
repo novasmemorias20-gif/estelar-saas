@@ -528,6 +528,96 @@ body.modo-desktop .copilot-painel { left: auto; right: 24px; bottom: 92px; margi
   font-size: 16px; cursor: pointer;
 }
 .copilot-enviar:disabled { opacity: .5; }
+
+/* =====================================================================
+   REDESIGN v1 (fase 1: só visual) — camada de sobreposição.
+   Não altera IDs, classes nem JS. Para voltar ao visual antigo, basta
+   apagar este bloco inteiro (do comentário "REDESIGN v1" até o "FIM REDESIGN v1").
+   ===================================================================== */
+:root {
+  --azul: #2F6FDE;
+  --azul-escuro: #0B2A5B;
+  --azul-tinta: #eaf1fd;
+  --ciano: #1B4A93;
+  --gradiente: linear-gradient(135deg, #0B2A5B, #1B4A93);
+  --ambar: #F28C1B;
+  --ambar-escuro: #B45309;
+  --ambar-tinta: #FFF1DC;
+  --cinza-claro: #eef2f8;
+  --cinza-linha: #e1e7f1;
+  --cinza-texto: #6b7a99;
+  --sombra: 0 1px 2px rgba(11,42,91,.05), 0 8px 22px rgba(11,42,91,.07);
+  --sombra-flutuante: 0 10px 30px rgba(11,42,91,.18);
+}
+html[data-tema="escuro"] {
+  --azul: #6EA6FF;
+  --azul-tinta: #16294A;
+  --gradiente: linear-gradient(135deg, #07173A, #12326B);
+  --ambar-tinta: #33260F;
+  --cinza-claro: #0a1220;
+  --superficie: #121c30;
+  --cinza-linha: #22304d;
+  --cinza-texto: #8ea0c4;
+}
+
+/* Cards, campos e botões */
+.card { border-radius: 18px; }
+input, select, textarea { border-radius: 12px; }
+.btn { border-radius: 14px; box-shadow: 0 5px 16px rgba(242,140,27,.34); }
+.btn:hover, .btn-ambar:hover { box-shadow: 0 7px 20px rgba(242,140,27,.42); }
+.btn-ambar { box-shadow: 0 5px 16px rgba(242,140,27,.34); }
+.btn-secundario { box-shadow: none; }
+[data-aba-atual="inicio"] .btn:not(.btn-secundario):not(.btn-ambar) { box-shadow: 0 5px 16px rgba(11,42,91,.28); }
+.lista-item { border-radius: 16px; }
+.ajustes-secao { border-radius: 18px; }
+.os-status-card { border-radius: 16px; border-width: 1px; }
+.item-card { border-radius: 16px; }
+.status-tag { padding: 3px 10px; }
+.modal-card { border-radius: 20px; }
+
+/* Cabeçalho do app no celular: faixa azul com o nome da empresa */
+body:not(.modo-desktop) .container > .topo {
+  background: var(--gradiente); color: #fff;
+  margin: -20px -16px 18px;
+  padding: calc(16px + env(safe-area-inset-top)) 16px 20px;
+  border-radius: 0 0 24px 24px;
+  box-shadow: 0 10px 26px rgba(11,42,91,.22);
+}
+@media (max-width: 360px) { body:not(.modo-desktop) .container > .topo { margin: -16px -12px 16px; padding-left: 12px; padding-right: 12px; } }
+body:not(.modo-desktop) .container > .topo h2 { color: #fff; font-size: 19px; }
+body:not(.modo-desktop) .container > .topo .badge-plano { background: rgba(255,255,255,.18); color: #fff; }
+body:not(.modo-desktop) .container > .topo .icon-btn { background: rgba(255,255,255,.16); border-color: transparent; color: #fff; width: 36px; height: 36px; border-radius: 11px; }
+body:not(.modo-desktop) .container > .topo .icon-btn:hover { background: rgba(255,255,255,.26); color: #fff; border-color: transparent; }
+
+/* Barra de abas inferior: ícone com "pílula" na aba ativa */
+.tabs { border-radius: 22px 22px 0 0; box-shadow: 0 -6px 24px rgba(11,42,91,.10); padding-top: 8px; }
+.tabs .tab { gap: 3px; font-size: 10px; padding: 2px 1px; }
+.tabs .tab svg { width: 36px; height: 28px; padding: 4px 8px; border-radius: 14px; transition: background .15s, color .15s; }
+.tabs .tab.ativa { color: var(--azul); }
+.tabs .tab.ativa svg { background: var(--azul-tinta); filter: none; }
+.tabs .tab.ativa span { font-weight: 800; }
+.tour-widget { bottom: calc(78px + env(safe-area-inset-bottom)); }
+body.modo-desktop .tour-widget { bottom: 24px; }
+.toast-container { bottom: calc(92px + env(safe-area-inset-bottom)); }
+
+/* Início: atalhos com ícone em "ladrilho" */
+.atalho-btn { border-radius: 18px; padding: 14px 8px 12px; }
+.atalho-btn svg { width: 44px; height: 44px; padding: 11px; border-radius: 14px; }
+.atalho-primario { background: var(--ambar); box-shadow: 0 6px 18px rgba(242,140,27,.32); }
+.atalho-primario svg { background: rgba(255,255,255,.22); }
+.atalho-secundario { box-shadow: var(--sombra); }
+.atalho-secundario svg { background: var(--azul-tinta); }
+[data-aba-atual="inicio"] .atalho-primario { background: var(--gradiente); box-shadow: 0 6px 18px rgba(11,42,91,.28); }
+
+/* Agenda: dia de hoje preenchido */
+.cal-dia { border-radius: 12px; }
+.cal-hoje { background: var(--azul); color: #fff; outline: none; font-weight: 800; }
+.cal-hoje.cal-tem { background: var(--azul); color: #fff; }
+.cal-hoje .cal-dot { box-shadow: 0 0 0 1.5px #fff; }
+html[data-tema="escuro"] .onboarding-progresso-fill { background: var(--azul); }
+html[data-tema="escuro"] .cal-hoje, html[data-tema="escuro"] .cal-hoje.cal-tem { background: var(--azul); color: #0a1220; }
+html[data-tema="escuro"] .cal-hoje .cal-dot { box-shadow: 0 0 0 1.5px #0a1220; }
+/* FIM REDESIGN v1 */
 </style>
 </head>
 <body>
